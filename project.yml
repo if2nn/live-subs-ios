@@ -13,13 +13,11 @@ targets:
     type: application
     platform: iOS
     sources: [App, Shared]
-    info:
-      path: App/Info.plist
-    entitlements:
-      path: App/LiveSubs.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aian.livesubs
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/LiveSubs.entitlements
     dependencies:
       - target: Broadcast
         embed: true
@@ -27,11 +25,9 @@ targets:
     type: app-extension
     platform: iOS
     sources: [Broadcast, Shared]
-    info:
-      path: Broadcast/Info.plist
-    entitlements:
-      path: Broadcast/Broadcast.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aian.livesubs.broadcast
+        INFOPLIST_FILE: Broadcast/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Broadcast/Broadcast.entitlements
         APPLICATION_EXTENSION_API_ONLY: YES
