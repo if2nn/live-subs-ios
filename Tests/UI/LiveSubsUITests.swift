@@ -114,9 +114,14 @@ final class LiveSubsUITests: XCTestCase {
   // Tap once and let the value settle before deciding on a second attempt,
   // otherwise a slow update reads as "0" and the retry flips it back.
   if (order.value as? String) != "1" {
-   order.tap()
+   // SwiftUI exposes the row as a Switch whose centre is the label; the real
+   // UISwitch is a nested Switch. Tap that one (known iOS 18+ behaviour).
+   let knob = order.switches.firstMatch
+   (knob.exists ? knob : order).tap()
    if !wait(order, timeout: 4, { ($0.value as? String) == "1" }) {
-    order.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+    let frame = order.frame
+    order.coordinate(withNormalizedOffset: .zero)
+     .withOffset(CGVector(dx: frame.width - 30, dy: frame.height / 2)).tap()
    }
   }
   XCTAssertTrue(wait(order, timeout: 4) { ($0.value as? String) == "1" }, "order toggle switched on: \(String(describing: order.value))")
