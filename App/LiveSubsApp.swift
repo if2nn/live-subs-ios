@@ -257,6 +257,7 @@ struct HistoryDetailView: View {
 
 struct SettingsView: View {
  @Environment(SettingsStore.self) private var store
+ @FocusState private var keyFocused: Bool
  var body: some View {
   @Bindable var store = store
   NavigationStack {
@@ -264,9 +265,10 @@ struct SettingsView: View {
     Section {
      SecureField(store.hasKey ? "已保存（输入新 Key 替换）" : "Soniox API Key", text: $store.keyDraft)
       .textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never)
+      .focused($keyFocused).submitLabel(.done).onSubmit { keyFocused = false }
       .accessibilityIdentifier("key.input")
      HStack {
-      Button("保存 Key") { store.saveKey() }.buttonStyle(.glass)
+      Button("保存 Key") { store.saveKey(); keyFocused = false }.buttonStyle(.glass)
        .disabled(store.keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
        .accessibilityIdentifier("key.save")
       Button(store.testing ? "测试中…" : "测试连接") { store.testKey() }.buttonStyle(.glass)
@@ -329,6 +331,7 @@ struct SettingsView: View {
      }.pickerStyle(.segmented).accessibilityIdentifier("settings.position")
     }
    }
+   .scrollDismissesKeyboard(.interactively)
    .navigationTitle("设置")
   }
  }

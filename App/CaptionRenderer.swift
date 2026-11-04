@@ -30,7 +30,7 @@ final class CaptionRenderer {
   let textHeight = settings.display == .bilingual
    ? Double(s.lines) * (main + secondary) + 18
    : Double(s.lines) * (settings.display == .originalOnly ? secondary / 0.78 : main)
-  let notice = 44.0
+  let notice = s.fontSize * 1.2 * 1.3 + 8
   let h = Int((textHeight + notice + 56 + Double(lanes - 1) * 8).rounded(.up))
   return min(max(h - h % 2, 240), 720)
  }
@@ -137,7 +137,9 @@ final class CaptionRenderer {
   }
   let gap: CGFloat = 8
   let total = measured.reduce(0, +) + gap * CGFloat(max(0, measured.filter { $0 > 0 }.count - 1))
-  let noticeHeight: CGFloat = content.notice.isEmpty ? 0 : 44
+  let hasCaption = fitted.contains { !$0.0.isEmpty }
+  let noticeFont = UIFont.systemFont(ofSize: s.fontSize * (hasCaption ? 1.2 : 1.6), weight: .medium)
+  let noticeHeight: CGFloat = content.notice.isEmpty || !hasCaption ? 0 : ceil(noticeFont.lineHeight) + 8
   let available = CGFloat(height) - 28 - noticeHeight
   var y: CGFloat
   switch s.position {
@@ -152,10 +154,15 @@ final class CaptionRenderer {
    y += h + gap
   }
   if !content.notice.isEmpty {
-   let noticeAttrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 26, weight: .medium),
-    .foregroundColor: UIColor(white: 0.75, alpha: 1), .paragraphStyle: center]
-   (content.notice as NSString).draw(with: CGRect(x: 48, y: CGFloat(height) - noticeHeight - 6, width: width, height: noticeHeight),
-    options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: noticeAttrs, context: nil)
+   // Status line: a footnote under live captions, or the centred message of an
+   // empty window. Sized from the caption font so it stays legible at PiP scale.
+   let noticeAttrs: [NSAttributedString.Key: Any] = [.font: noticeFont,
+    .foregroundColor: UIColor(white: hasCaption ? 0.62 : 0.8, alpha: 1), .paragraphStyle: center]
+   let lineH = ceil(noticeFont.lineHeight) * (hasCaption ? 1 : 2) + 4
+   let rect = hasCaption
+    ? CGRect(x: 48, y: CGFloat(height) - noticeHeight - 6, width: width, height: noticeHeight)
+    : CGRect(x: 48, y: (CGFloat(height) - lineH) / 2, width: width, height: lineH)
+   (content.notice as NSString).draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: noticeAttrs, context: nil)
   }
   return pixel
  }
