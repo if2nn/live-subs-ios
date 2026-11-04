@@ -43,7 +43,9 @@ enum Store {
   if !local.isEmpty, SharedSigning.keychainGroups.contains(where: { read(query(group: $0)) == local }) {
    return "共享钥匙串；扩展仍需启动验证"
   }
-  return "主 App 私有钥匙串"
+  return SharedSigning.discovery.privateGroup != nil
+   ? "主 App 私有钥匙串"
+   : "默认钥匙串；未确认私有或扩展共享"
  }
  static func save(_ raw: String) throws {
   let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -34,8 +34,8 @@ import Observation
  }
  private func saveMessage()->String{
   let scope=Store.saveScopeDescription
-  let isPrivate=scope.contains("私有")
-  return "已保存（"+scope+"）"+(isPrivate ? "。仅保存在主 App 私有钥匙串，广播扩展读不到，暂时不能广播。" : "")
+  let shared=scope.hasPrefix("共享钥匙串")
+  return "已保存（"+scope+"）"+(shared ? "" : "。仅确认主 App 可保存和测试连接，不代表广播扩展可读或可广播。")
  }
  func test(){
   let k=trimmed

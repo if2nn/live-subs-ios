@@ -72,8 +72,14 @@ enum SharedSigning {
   let appID = profile["application-identifier"] as? String
   // A dedicated app identifier is private even if SideStore made a different
   // shared group the default. Never guess a private identifier without probing.
-  let privateID = appID.flatMap { ProfileHints.identifiers([$0]).first }
-  let privateGroup = privateID.flatMap { keychainStatus($0) == errSecSuccess ? $0 : nil }
+  let profilePrivateID = appID.flatMap { ProfileHints.identifiers([$0]).first }
+  let derivedPrivateID: String? = {
+   guard defaultStatus == errSecSuccess, let prefix = prefix,
+         let bundleID = Bundle.main.bundleIdentifier else { return nil }
+   return ProfileHints.identifiers([prefix + "." + bundleID]).first
+  }()
+  let privateIDs = [profilePrivateID, derivedPrivateID].compactMap { $0 }
+  let privateGroup = privateIDs.first { keychainStatus($0) == errSecSuccess }
   let extra = ProfileHints.identifiers(profile["keychain-access-groups"]).sorted()
    .filter { $0 != appID && !candidates.contains($0) }
    .map { ($0, keychainStatus($0)) }
@@ -102,7 +108,7 @@ enum SharedSigning {
    "Profile present: \(d.profilePresent), parsed: \(d.profileParsed)",
    "Profile values are hints; OS probes authorize access.",
    "Default access group: " + (d.defaultGroup ?? "(unknown)") + " OSStatus=\(d.defaultStatus)",
-   "Private app access group: " + (d.privateGroup ?? "(default fallback)"),
+   "Private app access group: " + (d.privateGroup ?? "(unconfirmed; default Keychain fallback)"),
    "Available container: " + (resolved?.group ?? "(none)"),
    "Available shared Keychain groups: " + (keychainGroups.isEmpty ? "(none)" : keychainGroups.joined(separator: ", "))
   ]

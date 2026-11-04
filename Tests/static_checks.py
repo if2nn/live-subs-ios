@@ -45,6 +45,8 @@ check('SecTaskCopyValueForEntitlement' not in signing, "no unavailable entitleme
 check('status: keychainStatus(candidate)' in signing, "shared Keychain authorization probe")
 check('ProfileHints.candidates' in signing and 'ProfileHints.decode' in signing, "profile-hint dynamic discovery")
 check('LiveSubs.Private' in store and 'SharedSigning.isExtension' in store, "private save without extension leakage")
+check('derivedPrivateID' in signing and 'privateIDs.first { keychainStatus($0) == errSecSuccess }' in signing, "probe derived app-private group")
+check('默认钥匙串；未确认私有或扩展共享' in store and 'scope.hasPrefix("共享钥匙串")' in app, "unknown default is not described as private")
 check('saveScopeDescription' in store and 'diagnosticText' in signing, "visible credential and signing state")
 check('ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon' in project, "AppIcon selected")
 check((root / 'App/Assets.xcassets/AppIcon.appiconset/AppIcon.png').is_file(), "AppIcon asset")
