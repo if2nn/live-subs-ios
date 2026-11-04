@@ -107,7 +107,7 @@ def test():
     print(STATE.read_text(), flush=True)
     run(["xcrun", "simctl", "boot", udid])
     run(["xcrun", "simctl", "bootstatus", udid, "-b"], timeout=240)
-    run(["xcrun", "simctl", "list", "devices", "--json"])
+    # bootstatus is the readiness gate; do not block tests on a redundant global device inventory.
     ent = OUT / "Simulator.entitlements"
     ent.write_bytes(plistlib.dumps({}))
     result = run(["xcodebuild", "-project", "LiveSubs.xcodeproj", "-scheme", "LiveSubs",
