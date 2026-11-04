@@ -5,6 +5,10 @@ struct Caption: Codable, Sendable, Equatable {
  /// Monotonic per extension session; lets the app skip unchanged frames.
  var seq = 0
  var session = ""
+ /// The sentence being spoken now (or the last finished one); everything
+ /// before it in `original`/`translated` is context drawn dimmer, lyric-style.
+ var originalLive: String? = nil
+ var translatedLive: String? = nil
 }
 struct Segment: Codable, Sendable {
  enum Lane: String, Codable, Sendable { case original, translation }
@@ -23,6 +27,8 @@ struct Transcript: Codable, Sendable {
  var target = Lane()
  var recentSource = ""
  var recentTarget = ""
+ var lastSource = ""
+ var lastTarget = ""
  // Each lane owns its boundary. Translation tokens have no source timestamps.
  mutating func ingest(_ tokens: [[String: Any]], arrivalMS: Int = 0) -> [Segment] {
   source.partial = ""; target.partial = ""
@@ -59,8 +65,8 @@ struct Transcript: Codable, Sendable {
   var remaining = Lane()
   remaining.partial = current.partial
   if !current.partial.isEmpty { remaining.start = current.end; remaining.end = current.end }
-  if lane == .original { recentSource = Transcript.rolling(recentSource, current.final); source = remaining }
-  else { recentTarget = Transcript.rolling(recentTarget, current.final); target = remaining }
+  if lane == .original { recentSource = Transcript.rolling(recentSource, current.final); lastSource = current.final; source = remaining }
+  else { recentTarget = Transcript.rolling(recentTarget, current.final); lastTarget = current.final; target = remaining }
   return cue
  }
  mutating func finishFinals() -> [Segment] {
@@ -74,7 +80,10 @@ struct Transcript: Codable, Sendable {
  var caption: Caption {
   let o = source.visible.isEmpty ? recentSource : Transcript.rolling(recentSource, source.visible, limit: 400)
   let t = target.visible.isEmpty ? recentTarget : Transcript.rolling(recentTarget, target.visible, limit: 400)
-  return Caption(original: String(o.suffix(400)), translated: String(t.suffix(400)), status: "正在识别")
+  var c = Caption(original: String(o.suffix(400)), translated: String(t.suffix(400)), status: "正在识别")
+  c.originalLive = source.visible.isEmpty ? lastSource : source.visible
+  c.translatedLive = target.visible.isEmpty ? lastTarget : target.visible
+  return c
  }
 }
 /// Space only between two Latin-script words; CJK text joins directly.

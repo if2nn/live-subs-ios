@@ -76,6 +76,20 @@ final class CaptionRenderer {
   return String(chars[lo...]).trimmingCharacters(in: .whitespaces)
  }
 
+ /// Lyric-style emphasis: the live sentence at full color, earlier context dimmed.
+ static func lyric(_ text: String, live: String, attributes: [NSAttributedString.Key: Any]) -> NSAttributedString {
+  let out = NSMutableAttributedString(string: text, attributes: attributes)
+  let liveTrimmed = live.trimmingCharacters(in: .whitespaces)
+  guard !liveTrimmed.isEmpty, let color = attributes[.foregroundColor] as? UIColor else { return out }
+  let ns = text as NSString
+  let range = ns.range(of: liveTrimmed, options: .backwards)
+  let liveStart = range.location == NSNotFound ? max(0, ns.length - (liveTrimmed as NSString).length) : range.location
+  if liveStart > 0 {
+   out.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.5), range: NSRange(location: 0, length: liveStart))
+  }
+  return out
+ }
+
  func render(_ content: Content) -> CVPixelBuffer? {
   let settings = content.settings.normalized()
   let s = settings.style
@@ -102,11 +116,11 @@ final class CaptionRenderer {
    [.font: font, .foregroundColor: Self.uiColor(color), .paragraphStyle: center, .shadow: shadow,
     .strokeColor: UIColor.black, .strokeWidth: -2.0]
   }
-  struct Block { var text: String; var attributes: [NSAttributedString.Key: Any]; var lineHeight: CGFloat }
+  struct Block { var text: String; var live: String; var attributes: [NSAttributedString.Key: Any]; var lineHeight: CGFloat }
   var blocks: [Block] = []
-  let original = Block(text: content.original, attributes: attrs(settings.display == .originalOnly ? mainFont : secondFont, s.originalColor),
+  let original = Block(text: content.original, live: content.originalLive, attributes: attrs(settings.display == .originalOnly ? mainFont : secondFont, s.originalColor),
                        lineHeight: (settings.display == .originalOnly ? mainFont : secondFont).lineHeight)
-  let translated = Block(text: content.translated, attributes: attrs(mainFont, s.translationColor), lineHeight: mainFont.lineHeight)
+  let translated = Block(text: content.translated, live: content.translatedLive, attributes: attrs(mainFont, s.translationColor), lineHeight: mainFont.lineHeight)
   switch settings.display {
   case .originalOnly: blocks = [original]
   case .translationOnly: blocks = [translated]
@@ -131,8 +145,8 @@ final class CaptionRenderer {
   }
   for (index, pair) in fitted.enumerated() where !pair.0.isEmpty {
    let h = measured[index]
-   (pair.0 as NSString).draw(with: CGRect(x: 48, y: y, width: width, height: h + 2),
-    options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: pair.1.attributes, context: nil)
+   Self.lyric(pair.0, live: pair.1.live, attributes: pair.1.attributes)
+    .draw(with: CGRect(x: 48, y: y, width: width, height: h + 2), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], context: nil)
    y += h + gap
   }
   if !content.notice.isEmpty {

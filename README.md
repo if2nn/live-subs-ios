@@ -95,6 +95,29 @@ Each candidate is checked with real OS probes: `containerURL(forSecurityApplicat
 - SideStore re-signing of both targets, shared Keychain read after save, relaunch and refresh.
 - Long sessions: extension memory, history file size, reconnects.
 
+## Design references and credits
+
+The preview 4 flow and caption window were designed after studying these projects. The ideas are credited here. **No source code was copied** from any of them; Live Subs' code is its own.
+
+- [yuxino/Osu](https://github.com/yuxino/Osu) (MIT). An iPhone app that shows translated captions of other apps' audio in PiP via a ReplayKit broadcast. Ideas used:
+  - lyric-style emphasis: the current sentence bright, earlier context dimmed
+  - a black caption canvas
+  - "Start" goes straight to the system broadcast sheet
+  - IOSurface BGRA frames with DisplayImmediately and auto-PiP from inline
+- [Chedrian07/afm-screen-translator](https://github.com/Chedrian07/afm-screen-translator) (MIT). A ReplayKit plus sample-buffer PiP translator. Ideas used:
+  - its documented iOS limits: no programmatic broadcast start, PiP starts only in the foreground, PiP plus an audio session gives background runtime, and the ~50 MB extension memory budget
+  - walking the user through the picker honestly
+- [mgkcloud/ios-audio-capture-findings](https://github.com/mgkcloud/ios-audio-capture-findings) (no license; facts only). Device measurements of `.audioApp` on iOS 26.6: 44.1 kHz, 2 ch, 16-bit **big-endian**, 1024 frames. Always read the ASBD flags.
+- [uakihir0/UIPiPView](https://github.com/uakihir0/UIPiPView) (MIT). Rendering a view into AVSampleBufferDisplayLayer for PiP.
+- [phuc-nt/my-translator](https://github.com/phuc-nt/my-translator) (MIT, desktop) and [kizuna-ai-lab/sokuji](https://github.com/kizuna-ai-lab/sokuji) (AGPL-3.0, desktop; looked at only, no code used). Soniox real-time translation UX: source auto-detect, a target picker, and the user's own API key.
+
+Apple guidance followed:
+
+- [HIG Materials](https://developer.apple.com/design/human-interface-guidelines/materials): Liquid Glass for controls and navigation only, standard materials for content.
+- [Applying Liquid Glass to custom views](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views): `.glass` / `.glassProminent` button styles.
+- [HIG Playing video](https://developer.apple.com/design/human-interface-guidelines/playing-video).
+- [Adopting Picture in Picture in a custom player](https://developer.apple.com/documentation/avkit/adopting-picture-in-picture-in-a-custom-player).
+
 ## References
 
 - https://docs.soniox.com/api-reference/stt/websocket-api

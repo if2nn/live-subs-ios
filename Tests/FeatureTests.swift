@@ -211,6 +211,11 @@ import Foundation
   check(t.caption.original == "First sentence. Second", t.caption.original)
   check(t.caption.translated == "第一句。第二", t.caption.translated)
   check(Transcript.rolling(String(repeating: "a", count: 400), "b").count == 320, "rolling bounded")
+  check(t.caption.originalLive == "Second" && t.caption.translatedLive == "第二", "live sentence is the partial")
+  _ = t.ingest([tok("Second done."), tok("<end>")])
+  check(t.caption.originalLive == "Second done.", "after endpoint the last sentence stays live")
+  let old = try JSONDecoder().decode(Caption.self, from: Data(#"{"original":"a","translated":"b","status":"s","updated":0,"seq":1,"session":""}"#.utf8))
+  check(old.originalLive == nil, "older caption files still decode")
 
   print("FeatureTests PASS (\(checks) checks: audio decode/resample, Soniox config, settings, history, captions)")
  }

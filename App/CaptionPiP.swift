@@ -282,7 +282,8 @@ final class CaptionPiP: NSObject, AVPictureInPictureControllerDelegate, AVPictur
  private func currentContent() -> CaptionRenderer.Content {
   let stale = phase != .running
   return CaptionRenderer.Content(original: stale && caption.original.isEmpty ? "" : caption.original,
-   translated: caption.translated, notice: notice, settings: settings)
+   translated: caption.translated, originalLive: caption.originalLive ?? "", translatedLive: caption.translatedLive ?? "",
+   notice: notice, settings: settings)
  }
 
  private func render(now: Double) {

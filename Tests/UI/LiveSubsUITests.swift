@@ -31,9 +31,13 @@ final class LiveSubsUITests: XCTestCase {
   button.tap()
  }
  private func reveal(_ element: XCUIElement, up: Bool = true) {
-  for _ in 0..<8 {
+  // Gentle swipes on the scroll container (not on whatever control sits at the
+  // screen centre, e.g. a Slider) so lazily-built rows are never skipped.
+  let scroller = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch : app.scrollViews.firstMatch
+  for _ in 0..<14 {
    if element.exists && element.isHittable { return }
-   up ? app.swipeUp() : app.swipeDown()
+   let target = scroller.exists ? scroller : app
+   up ? target.swipeUp(velocity: .slow) : target.swipeDown(velocity: .slow)
   }
  }
  private func wait(_ element: XCUIElement, timeout: TimeInterval = 10, _ predicate: @escaping (XCUIElement) -> Bool) -> Bool {
@@ -95,7 +99,8 @@ final class LiveSubsUITests: XCTestCase {
   display.buttons["仅译文"].tap()
   XCTAssertTrue(wait(app.staticTexts["settings.display.value"]) { $0.label.contains("仅译文") })
   // Style: order toggle and position.
-  let order = app.switches["settings.order"]
+  let orderQuery = NSPredicate(format: "identifier == 'settings.order' OR label == '译文在上'")
+  let order = app.switches.matching(orderQuery).firstMatch
   reveal(order)
   XCTAssertTrue(order.exists)
   if (order.value as? String) != "1" { order.tap() }
@@ -117,7 +122,7 @@ final class LiveSubsUITests: XCTestCase {
   let value = app.staticTexts["settings.display.value"]
   reveal(value)
   XCTAssertTrue(value.label.contains("仅译文"), "display mode survives restart: \(value.label)")
-  let order2 = app.switches["settings.order"]
+  let order2 = app.switches.matching(orderQuery).firstMatch
   reveal(order2)
   XCTAssertEqual(order2.value as? String, "1", "order toggle survives restart")
 
@@ -139,7 +144,9 @@ final class LiveSubsUITests: XCTestCase {
   launch(["--ui-testing-seed-history"])
   defer { capture("history-final") }
   openTab("历史")
-  let row = app.descendants(matching: .any).matching(identifier: "history.row").firstMatch
+  // A NavigationLink row is a button; avoid descendants(.any), which snapshots
+  // the whole tree and times out on the iOS 27 simulator.
+  let row = app.buttons.matching(NSPredicate(format: "identifier == 'history.row' OR label CONTAINS '→'")).firstMatch
   XCTAssertTrue(row.waitForExistence(timeout: 10), "seeded history row")
   row.tap()
   XCTAssertTrue(app.staticTexts["大家好，欢迎回来。"].waitForExistence(timeout: 5))
@@ -156,12 +163,12 @@ final class LiveSubsUITests: XCTestCase {
   let confirm = app.buttons["删除"].firstMatch
   XCTAssertTrue(confirm.waitForExistence(timeout: 5))
   confirm.tap()
-  XCTAssertTrue(app.descendants(matching: .any)["history.empty"].waitForExistence(timeout: 10), "entry deleted")
+  XCTAssertTrue(app.staticTexts["还没有字幕记录"].waitForExistence(timeout: 10), "entry deleted")
   // Deleted entries stay deleted after relaunch (without re-seeding).
   app.terminate()
   launch()
   openTab("历史")
-  XCTAssertTrue(app.descendants(matching: .any)["history.empty"].waitForExistence(timeout: 10))
+  XCTAssertTrue(app.staticTexts["还没有字幕记录"].waitForExistence(timeout: 10), "deleted entry not re-imported")
  }
 
  func testDiagnosticsPageShowsSigningAndCapture() throws {

@@ -89,7 +89,8 @@ check('settings.source' in app and 'settings.target' in app and 'settings.displa
 for ident in ["settings.fontSize", "settings.lines", "settings.translationColor", "settings.opacity", "settings.order", "settings.position"]:
     check(ident in app, "style control " + ident)
 check('DiagnosticsView' in app, "diagnostics page kept")
-check('.glassEffect(' in app and '.buttonStyle(.glassProminent)' in app, "Liquid Glass")
+check('.buttonStyle(.glassProminent)' in app and '.buttonStyle(.glass)' in app, "Liquid Glass on controls")
+check('.glassEffect(' not in app, "HIG: no Liquid Glass in the content layer")
 check('@Observable' in stores and '@Observable' in pip, "Observation models")
 check('ObservableObject' not in app + pip + stores, "no legacy ObservableObject")
 check('Store.writeHistory' in handler and 'importShared' in stores, "history written by extension, imported by app")

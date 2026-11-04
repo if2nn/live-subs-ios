@@ -67,7 +67,7 @@ struct LiveView: View {
       .accessibilityIdentifier("pip.preview")
 
      if pip.phase == .stopped || pip.phase == .stale {
-      GlassCard {
+      SectionCard {
        Label(pip.phase == .stopped ? "录屏已停止" : "录屏信号中断", systemImage: "exclamationmark.triangle.fill")
         .font(.headline).foregroundStyle(.yellow)
        Text("系统录屏结束后字幕不会再更新。点「重新开始」再次开启。").font(.callout)
@@ -75,7 +75,7 @@ struct LiveView: View {
       }.accessibilityIdentifier("broadcast.stopped.banner")
      }
 
-     GlassCard {
+     SectionCard {
       Button { pip.oneTapStart() } label: {
        Label(pip.phase == .running ? "开启悬浮字幕" : "开始", systemImage: "play.fill")
         .font(.title3.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 6)
@@ -96,7 +96,7 @@ struct LiveView: View {
       Text(pip.captureStatus).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("capture.status")
      }
 
-     GlassCard {
+     SectionCard {
       Text("怎么用").font(.headline)
       Text("1. 点「开始」：悬浮字幕窗弹出，同时打开系统录屏面板。\n2. 在面板里选「双语字幕」，点「开始直播」。麦克风保持关闭。\n3. 回到视频 App 播放，字幕显示在悬浮窗里。\n4. 录屏停止后悬浮窗会提示，回到这里点「重新开始」。")
        .font(.callout).foregroundStyle(.secondary)
@@ -142,13 +142,16 @@ struct BroadcastPicker: UIViewRepresentable {
  func updateUIView(_ uiView: RPSystemBroadcastPickerView, context: Context) { launcher.picker = uiView }
 }
 
-struct GlassCard<Content: View>: View {
+/// Content-layer card. Per the HIG Materials guidance, Liquid Glass is kept for
+/// controls and navigation (glass buttons, tab bar, toolbars); content sits on
+/// a standard grouped background, not on glass.
+struct SectionCard<Content: View>: View {
  @ViewBuilder var content: Content
  var body: some View {
   VStack(alignment: .leading, spacing: 12) { content }
    .frame(maxWidth: .infinity, alignment: .leading)
    .padding(16)
-   .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+   .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
  }
 }
 
@@ -197,6 +200,7 @@ struct HistoryDetailView: View {
  @State private var mode: DisplayMode = .bilingual
  @State private var confirmDelete = false
  @State private var copied = false
+ @State private var exports: [URL] = []
  var body: some View {
   List {
    Section {
@@ -226,13 +230,16 @@ struct HistoryDetailView: View {
     Button { UIPasteboard.general.string = entry.plainText(mode); copied = true } label: {
      Image(systemName: copied ? "checkmark" : "doc.on.doc")
     }.accessibilityIdentifier("history.copy").accessibilityLabel("复制")
-    if let txt = history.exportFile(entry, mode: mode, srt: false), let srt = history.exportFile(entry, mode: mode, srt: true) {
-     ShareLink(items: [txt, srt]) { Image(systemName: "square.and.arrow.up") }
-      .accessibilityIdentifier("history.share").accessibilityLabel("分享")
-    }
+    ShareLink(items: exports) { Image(systemName: "square.and.arrow.up") }
+     .disabled(exports.isEmpty)
+     .accessibilityIdentifier("history.share").accessibilityLabel("分享")
     Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
      .accessibilityIdentifier("history.delete").accessibilityLabel("删除记录")
    }
+  }
+  // Export files are written once per display mode, not on every body pass.
+  .task(id: mode) {
+   exports = [history.exportFile(entry, mode: mode, srt: false), history.exportFile(entry, mode: mode, srt: true)].compactMap { $0 }
   }
   .confirmationDialog("删除这条字幕记录？", isPresented: $confirmDelete, titleVisibility: .visible) {
    Button("删除", role: .destructive) { history.delete(entry); dismiss() }.accessibilityIdentifier("history.delete.confirm")
@@ -240,7 +247,7 @@ struct HistoryDetailView: View {
   .overlay(alignment: .bottom) {
    if copied {
     Text("已复制").font(.callout).padding(.horizontal, 14).padding(.vertical, 8)
-     .glassEffect(.regular, in: Capsule()).padding(.bottom, 24).accessibilityIdentifier("history.copied")
+     .background(.regularMaterial, in: Capsule()).padding(.bottom, 24).accessibilityIdentifier("history.copied")
    }
   }
  }
