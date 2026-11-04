@@ -111,9 +111,15 @@ final class LiveSubsUITests: XCTestCase {
   let order = app.switches.matching(orderQuery).firstMatch
   reveal(order)
   XCTAssertTrue(order.exists)
-  if (order.value as? String) != "1" { order.tap() }
-  if (order.value as? String) != "1" { order.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap() }
-  XCTAssertEqual(order.value as? String, "1", "order toggle switched on")
+  // Tap once and let the value settle before deciding on a second attempt,
+  // otherwise a slow update reads as "0" and the retry flips it back.
+  if (order.value as? String) != "1" {
+   order.tap()
+   if !wait(order, timeout: 4, { ($0.value as? String) == "1" }) {
+    order.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+   }
+  }
+  XCTAssertTrue(wait(order, timeout: 4) { ($0.value as? String) == "1" }, "order toggle switched on: \(String(describing: order.value))")
   let position = app.segmentedControls["settings.position"]
   reveal(position)
   position.buttons["顶部"].tap()
