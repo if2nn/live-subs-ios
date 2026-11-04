@@ -36,7 +36,7 @@ final class LiveSubsUITests: XCTestCase {
   let scroller = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch : app.scrollViews.firstMatch
   for _ in 0..<14 {
    if element.exists && element.isHittable { return }
-   let target = scroller.exists ? scroller : app
+   let target: XCUIElement = scroller.exists ? scroller : (app! as XCUIElement)
    up ? target.swipeUp(velocity: .slow) : target.swipeDown(velocity: .slow)
   }
  }
