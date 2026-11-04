@@ -4,6 +4,9 @@ on:
   push:
     branches: [mac-dev]
     paths: ['macOS/**', '.github/workflows/macos.yml']
+concurrency:
+  group: livesubs-macos-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

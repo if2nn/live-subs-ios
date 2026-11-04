@@ -25,6 +25,7 @@ final class MacModel {
  private var offset = 0
  private var lastSave = Date.distantPast
  private var panel: NSPanel?
+ private var startFailure: String?
 
  init() {
   do { keyDraft = try KeyVault.read(); history = try Archive.load() }
@@ -44,7 +45,7 @@ final class MacModel {
   do {
    let key = try KeyVault.read()
    guard !key.isEmpty else { error = "请先保存 Soniox API Key"; return }
-   epoch = UUID(); let id = epoch
+   startFailure = nil; epoch = UUID(); let id = epoch
    began = Date(); offset = 0; transcript = Transcript(); caption = Caption(); selectedHistory = nil
    let language = settings.languages.normalized()
    current = HistoryEntry(id: UUID().uuidString, started: began, updated: began, source: language.source, target: language.target)
@@ -58,6 +59,7 @@ final class MacModel {
    }}
    socket.onFatal = { [weak self] message in Task { @MainActor in
     guard let self, self.epoch == id else { return }; self.error = message
+    if self.busy { self.startFailure = message; return }
     await self.stop(); self.status = message
    }}
    socket.onReconnect = { [weak self] in Task { @MainActor in
@@ -69,8 +71,13 @@ final class MacModel {
    socket.start(key, config: SonioxConfig.json(language))
    try await audio.start(client: socket) { [weak self] message in Task { @MainActor in
     guard let self, self.epoch == id else { return }; self.error = message
+    if self.busy { self.startFailure = message; return }
     await self.stop(); self.status = message
    }}
+   if let startFailure {
+    try await audio.stop(); socket.stop(); client = nil
+    status = startFailure; error = startFailure; return
+   }
    running = true; status = "正在聆听系统音频"
    if !split { showPanel() }
   } catch {
