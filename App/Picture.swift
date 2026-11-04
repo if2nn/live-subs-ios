@@ -2,7 +2,8 @@ import AVKit
 import UIKit
 import SwiftUI
 
-final class Picture:NSObject,ObservableObject,AVPictureInPictureSampleBufferPlaybackDelegate,AVPictureInPictureControllerDelegate {
+@MainActor
+final class Picture:NSObject,ObservableObject,@preconcurrency AVPictureInPictureSampleBufferPlaybackDelegate,@preconcurrency AVPictureInPictureControllerDelegate {
  let layer=AVSampleBufferDisplayLayer()
  @Published var status="先开启画中画，再开始广播"
  private var controller:AVPictureInPictureController?
@@ -21,7 +22,7 @@ final class Picture:NSObject,ObservableObject,AVPictureInPictureSampleBufferPlay
    controller=AVPictureInPictureController(contentSource:source);controller?.delegate=self
    controller?.requiresLinearPlayback=true
   }else{status="此设备不支持画中画"}
-  timer=Timer.scheduledTimer(withTimeInterval:0.2,repeats:true){[weak self] _ in self?.render(Store.read() ?? Caption())}
+  timer=Timer.scheduledTimer(withTimeInterval:0.2,repeats:true){[weak self] _ in Task { @MainActor [weak self] in self?.render(Store.read() ?? Caption()) }}
  }
  func start(){
   do{

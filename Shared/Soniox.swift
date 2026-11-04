@@ -1,6 +1,7 @@
 import Foundation
 
-final class Soniox {
+// Mutable socket state is confined to queue; callbacks are configured before start.
+final class Soniox: @unchecked Sendable {
  let queue=DispatchQueue(label:"soniox.serial")
  private var ws:URLSessionWebSocketTask?
  private var session:URLSession?
@@ -9,7 +10,7 @@ final class Soniox {
  private var active=false
  private var ready=false
  private var ending=false
- private var endCompletion:((Bool)->Void)?
+ private var endCompletion:(@Sendable (Bool)->Void)?
  private var pending=0
  private var attempt=0
  private var lastReceive=Date()
@@ -86,7 +87,7 @@ final class Soniox {
  private func stopInternal(){active=false;ready=false;generation+=1;timer?.cancel();timer=nil;ws?.cancel(with:.normalClosure,reason:nil);session?.invalidateAndCancel()}
  // Called from any queue; all messages and completion run on queue.
  // Empty TEXT (not empty binary) ends audio and requests final results.
- func finish(timeout:TimeInterval=1.5,completion:@escaping(Bool)->Void){queue.async{
+ func finish(timeout:TimeInterval=1.5,completion:@escaping @Sendable (Bool)->Void){queue.async{
   guard !self.ending else {completion(false);return}
   guard self.active,self.ready else {self.stopInternal();completion(false);return}
   self.ending=true;self.endCompletion=completion;self.timer?.cancel();self.timer=nil

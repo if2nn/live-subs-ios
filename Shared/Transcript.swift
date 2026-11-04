@@ -1,18 +1,18 @@
 import Foundation
 
-struct Caption: Codable {
+struct Caption: Codable, Sendable {
  var original = ""; var translated = ""; var status = "等待广播"; var updated = Date()
 }
-struct Segment: Codable {
- enum Lane: String, Codable { case original, translation }
+struct Segment: Codable, Sendable {
+ enum Lane: String, Codable, Sendable { case original, translation }
  var lane: Lane
  var text: String
  var start: Int
  var end: Int
  var approximate: Bool
 }
-struct Transcript: Codable {
- struct Lane: Codable {
+struct Transcript: Codable, Sendable {
+ struct Lane: Codable, Sendable {
   var final = ""; var partial = ""; var start: Int?; var end = 0
   var visible: String { final + partial }
  }
@@ -69,7 +69,7 @@ struct Transcript: Codable {
           status: "正在识别")
  }
 }
-struct Recovery: Codable {
+struct Recovery: Codable, Sendable {
  var transcript: Transcript
  var unarchived: [Segment]
  var offset: Int

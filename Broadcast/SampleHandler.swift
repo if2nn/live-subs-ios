@@ -1,7 +1,9 @@
 import ReplayKit
 import AVFoundation
 
-final class SampleHandler:RPBroadcastSampleHandler{
+// ReplayKit serializes audio callbacks; transcript/archive state is confined to client.queue.
+// Only immutable PCM Data crosses into the socket queue.
+final class SampleHandler:RPBroadcastSampleHandler, @unchecked Sendable{
  private let client=Soniox()
  private var converter:AVAudioConverter?
  private var inputFormat:AVAudioFormat?
