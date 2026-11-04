@@ -1,5 +1,8 @@
 import Foundation
-import ScreenCaptureKit
+// macOS 15 SDK predates Sendable annotations on SCShareableContent/SCStream.
+// Framework references are created, retained and controlled only by SystemAudio on MainActor;
+// audio callbacks own their decoder on a separate serial queue and emit Data only.
+@preconcurrency import ScreenCaptureKit
 import CoreMedia
 import AudioToolbox
 
