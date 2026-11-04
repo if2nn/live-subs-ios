@@ -13,7 +13,8 @@ on:
 permissions:
   contents: read
 jobs:
-  # Simulator build + 5 UI tests take ~20 min on the xcode-27 runner.
+  # Simulator build + 5 UI tests take ~20 min on the xcode-27 runner;
+  # a job that gets no runner is cancelled after ~15 min and needs a re-push.
   simulator_ui:
     runs-on: xcode-27
     timeout-minutes: 40
