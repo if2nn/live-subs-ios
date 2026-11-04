@@ -3,18 +3,27 @@ import Security
 
 enum SharedSigning {
  static let baseGroup = "group.com.aian.livesubs"
- // Provisioning profile values are hints, never authorization. Validate the
- // actual sandbox container and Keychain operation instead of private APIs.
+ struct Probe: Sendable {
+  let group: String
+  let container: URL?
+  let status: OSStatus
+ }
+ struct Discovery: Sendable {
+  let profilePresent: Bool
+  let profileParsed: Bool
+  let defaultGroup: String?
+  let defaultStatus: OSStatus
+  let privateGroup: String?
+  let probes: [Probe]
+  let keychain: [(String, OSStatus)]
+ }
  static func profileEntitlements() -> [String: Any] {
   guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
-        let data = try? Data(contentsOf: url),
-        let begin = data.range(of: Data("<?xml".utf8)),
-        let finish = data.range(of: Data("</plist>".utf8), in: begin.lowerBound..<data.endIndex),
-        let plist = try? PropertyListSerialization.propertyList(from: data.subdata(in: begin.lowerBound..<finish.upperBound), options: [], format: nil) as? [String: Any]
-  else { return [:] }
-  return plist["Entitlements"] as? [String: Any] ?? [:]
+        let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+        size <= 2_097_152, let data = try? Data(contentsOf: url) else { return [:] }
+  return ProfileHints.decode(data)
  }
- static func defaultAccessGroup() -> String? {
+ static func defaultProbe() -> (String?, OSStatus) {
   let account = UUID().uuidString
   let query: [String: Any] = [
    kSecClass as String: kSecClassGenericPassword,
@@ -25,48 +34,83 @@ enum SharedSigning {
    kSecReturnAttributes as String: true
   ]
   var result: CFTypeRef?
-  guard SecItemAdd(query as CFDictionary, &result) == errSecSuccess else { return nil }
-  let removal: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+  let status = SecItemAdd(query as CFDictionary, &result)
+  guard status == errSecSuccess else { return (nil, status) }
+  let group = (result as? [String: Any])?[kSecAttrAccessGroup as String] as? String
+  var removal: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
    kSecAttrService as String: "LiveSubs.SigningProbe", kSecAttrAccount as String: account]
+  if let group = group { removal[kSecAttrAccessGroup as String] = group }
   SecItemDelete(removal as CFDictionary)
-  return (result as? [String: Any])?[kSecAttrAccessGroup as String] as? String
+  return (group, status)
  }
- // A container alone does not establish shared Keychain authorization.
- static func canAccessKeychain(_ group: String) -> Bool {
+ static func keychainStatus(_ group: String) -> OSStatus {
   let account = UUID().uuidString
   let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
    kSecAttrService as String: "LiveSubs.SharedProbe", kSecAttrAccount as String: account,
    kSecAttrAccessGroup as String: group, kSecValueData as String: Data(),
    kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
   let status = SecItemAdd(q as CFDictionary, nil)
-  guard status == errSecSuccess else { return false }
+  guard status == errSecSuccess else { return status }
   var removal = q
   removal.removeValue(forKey: kSecValueData as String)
   removal.removeValue(forKey: kSecAttrAccessible as String)
   SecItemDelete(removal as CFDictionary)
-  return true
+  return status
  }
- static let resolved: (group: String, root: URL)? = {
+ static let discovery: Discovery = {
   let profile = profileEntitlements()
   let configured = Bundle.main.object(forInfoDictionaryKey: "SharedAppGroupCandidates") as? [String] ?? []
-  let profiled = (profile["com.apple.security.application-groups"] as? [String] ?? [])
-   .filter { $0 == baseGroup || $0.hasPrefix(baseGroup + ".") }
-  let prefix = defaultAccessGroup()?.split(separator: ".").first.map(String.init)
-  let id = Bundle.main.bundleIdentifier ?? ""
-  let parent = id.hasSuffix(".broadcast") ? String(id.dropLast(".broadcast".count)) : id
-  // Also covers common team-suffixed IDs without relying on profile parsing.
-  var candidates = profiled + ["group." + parent] + configured
-  if let prefix = prefix { candidates.append(baseGroup + "." + prefix) }
-  candidates.append(baseGroup)
-  var seen = Set<String>()
-  for candidate in candidates where !candidate.contains("$(") && seen.insert(candidate).inserted {
-   if let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: candidate),
-      canAccessKeychain(candidate) {
-    return (candidate, root)
-   }
+  let (defaultGroup, defaultStatus) = defaultProbe()
+  let prefix = defaultGroup?.split(separator: ".").first.map(String.init)
+  let candidates = ProfileHints.candidates(profile: profile, configured: configured,
+   bundleID: Bundle.main.bundleIdentifier ?? "", prefix: prefix)
+  let probes = candidates.map { candidate in
+   Probe(group: candidate,
+    container: FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: candidate),
+    status: keychainStatus(candidate))
   }
-  return nil
+  let appID = profile["application-identifier"] as? String
+  // A dedicated app identifier is private even if SideStore made a different
+  // shared group the default. Never guess a private identifier without probing.
+  let privateID = appID.flatMap { ProfileHints.identifiers([$0]).first }
+  let privateGroup = privateID.flatMap { keychainStatus($0) == errSecSuccess ? $0 : nil }
+  let extra = ProfileHints.identifiers(profile["keychain-access-groups"]).sorted()
+   .filter { $0 != appID && !candidates.contains($0) }
+   .map { ($0, keychainStatus($0)) }
+  return Discovery(profilePresent: Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") != nil,
+   profileParsed: !profile.isEmpty, defaultGroup: defaultGroup, defaultStatus: defaultStatus,
+   privateGroup: privateGroup, probes: probes, keychain: extra)
  }()
+ // Container access and Keychain access are independent. Do not discard a
+ // real container merely because the signer omitted shared Keychain rights.
+ static var resolved: (group: String, root: URL)? {
+  guard let p = discovery.probes.first(where: { $0.container != nil }), let root = p.container else { return nil }
+  return (p.group, root)
+ }
+ static var keychainGroups: [String] {
+  // Do not publish credentials into unrelated signer/SideStore access groups.
+  // Profile Keychain groups are shown as diagnostics only; App Groups are
+  // shared candidates for this app and must pass an actual Keychain probe.
+  discovery.probes.filter { $0.status == errSecSuccess }.map(\.group)
+ }
+ static var isExtension: Bool { Bundle.main.object(forInfoDictionaryKey: "NSExtension") != nil }
+ static var diagnosticText: String {
+  let d = discovery
+  var lines = [
+   "Bundle ID: " + (Bundle.main.bundleIdentifier ?? "(missing)"),
+   "Process: " + (isExtension ? "broadcast extension" : "main app"),
+   "Profile present: \(d.profilePresent), parsed: \(d.profileParsed)",
+   "Profile values are hints; OS probes authorize access.",
+   "Default access group: " + (d.defaultGroup ?? "(unknown)") + " OSStatus=\(d.defaultStatus)",
+   "Private app access group: " + (d.privateGroup ?? "(default fallback)"),
+   "Available container: " + (resolved?.group ?? "(none)"),
+   "Available shared Keychain groups: " + (keychainGroups.isEmpty ? "(none)" : keychainGroups.joined(separator: ", "))
+  ]
+  lines += d.probes.map { "Candidate \($0.group) container=\($0.container != nil) Keychain OSStatus=\($0.status)" }
+  lines += d.keychain.map { "Profile access group \($0.0) Keychain OSStatus=\($0.1)" }
+  lines.append("Extension sharing is not confirmed until the extension reads the saved credential.")
+  return lines.joined(separator: "\n")
+ }
  static var broadcastIdentifier: String? {
   guard let plugins = Bundle.main.builtInPlugInsURL,
         let urls = try? FileManager.default.contentsOfDirectory(at: plugins, includingPropertiesForKeys: nil) else { return nil }

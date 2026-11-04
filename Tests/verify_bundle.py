@@ -11,7 +11,10 @@ def verify(app):
     info = plistlib.loads((app / "Info.plist").read_bytes())
     ext_info = plistlib.loads((extension / "Info.plist").read_bytes())
     assert info["CFBundleVersion"] == ext_info["CFBundleVersion"] == "2"
-    assert info["MinimumOSVersion"] == "27.0"
+    assert info["MinimumOSVersion"] == ext_info["MinimumOSVersion"] == "27.0"
+    assert info["DTSDKName"] == "iphoneos27.2"
+    assert ext_info["CFBundleIdentifier"] == info["CFBundleIdentifier"] + ".broadcast"
+    assert "audio" in info["UIBackgroundModes"]
     assert info["SharedAppGroupCandidates"] == ext_info["SharedAppGroupCandidates"]
     point = ext_info["NSExtension"]
     assert point["NSExtensionPointIdentifier"] == "com.apple.broadcast-services-upload"

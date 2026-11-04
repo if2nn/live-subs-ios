@@ -3,6 +3,7 @@ import ReplayKit
 import Observation
 
 @main struct LiveSubsApp:App{
+ init(){Diagnostics.install()}
  var body:some Scene{WindowGroup{Home()}}
 }
 @MainActor @Observable final class HomeModel{
@@ -13,23 +14,56 @@ import Observation
  var share:[URL]=[]
  var showShare=false
  private var tester:Soniox?
+ var diagOpen=false
+ var diagnostic:String{SharedSigning.diagnosticText}
+ var previousDiagnostic:String{Diagnostics.previousSessionSummary}
+ func exportDiagnostics(){
+  guard let events=Diagnostics.exportURL,
+        let text=try? String(contentsOf:events,encoding:.utf8) else{
+   message="诊断日志暂时无法读取";return
+  }
+  let output=events.deletingLastPathComponent().appendingPathComponent("LiveSubs-diagnostics.txt")
+  do{
+   try (previousDiagnostic+"\n\n"+diagnostic+"\n\n"+text).write(to:output,atomically:true,encoding:.utf8)
+   share=[output];showShare=true
+  }catch{message="诊断导出失败"}
+ }
+ private var trimmed:String{key.trimmingCharacters(in:.whitespacesAndNewlines)}
  func saveKey(){
-  do{try Store.save(key.trimmingCharacters(in:.whitespacesAndNewlines));message="已保存"}catch{message="保存失败 "+error.localizedDescription}
+  do{try Store.save(trimmed);message=saveMessage()}catch{message="保存失败 "+error.localizedDescription}
+ }
+ private func saveMessage()->String{
+  let scope=Store.saveScopeDescription
+  let isPrivate=scope.contains("私有")
+  return "已保存（"+scope+"）"+(isPrivate ? "。仅保存在主 App 私有钥匙串，广播扩展读不到，暂时不能广播。" : "")
  }
  func test(){
-  do{try Store.save(key.trimmingCharacters(in:.whitespacesAndNewlines))}catch{message="保存失败 "+error.localizedDescription;return}
-  testing=true;message="连接并发送一秒静音验证鉴权"
+  let k=trimmed
+  do{try Store.save(k)}catch{message="保存失败 "+error.localizedDescription;return}
+  testing=true;message=saveMessage()+"。连接并发送一秒静音验证鉴权"
   let c=Soniox();tester=c
-  c.onStatus={[weak self] s in Task{@MainActor in self?.message=s}}
-  c.onMessage={[weak self] _ in
+  c.onStatus={[weak self] s in Task{@MainActor in if self?.testing==true{self?.message=s}}}
+  c.onFatal={[weak self] e in
    Task{@MainActor in
     guard let self,self.testing else{return}
+    self.message="连接失败 "+e;self.testing=false;self.tester?.stop();self.tester=nil
+   }
+  }
+  c.onMessage={[weak self] obj in
+   let err=(obj["error_message"] as? String) ?? (obj["error"] as? String)
+   let code=(obj["error_code"] as? Int).map(String.init)
+   Task{@MainActor in
+    guard let self,self.testing else{return}
+    if err != nil || code != nil{
+     self.message="Soniox 返回错误 "+(err ?? "code \(code!)");self.testing=false;self.tester?.stop();self.tester=nil;return
+    }
     self.message="已收到 Soniox 响应，连接可用";self.testing=false;self.tester?.stop();self.tester=nil
    }
   }
-  c.start(key.trimmingCharacters(in:.whitespacesAndNewlines))
+  c.start(k)
   Task{@MainActor in
    try? await Task.sleep(for:.seconds(1))
+   guard testing else{return}
    c.send(Data(repeating:0,count:32000),voiced:false)
    try? await Task.sleep(for:.seconds(8))
    if testing{message="未收到有效识别响应，请检查 Key、网络或余额";testing=false;c.stop();tester=nil}
@@ -73,6 +107,12 @@ struct Home:View{
        Button("关闭"){picture.stop()}.glassButton()
       }
       Text(picture.status).font(.caption).foregroundStyle(.secondary)
+      Text(m.previousDiagnostic).font(.caption2).textSelection(.enabled)
+      HStack{
+       Button("复制上次记录"){UIPasteboard.general.string=m.previousDiagnostic}.glassButton()
+       Button("导出诊断"){m.exportDiagnostics()}.glassButton()
+      }
+      Text("关键操作前同步落盘，保留上次会话。日志不含 Key、字幕或音频；不能捕获所有崩溃。").font(.caption2).foregroundStyle(.secondary)
       Text("先开启画中画，再点系统广播按钮。也可在控制中心长按录屏，选择双语字幕。麦克风可关闭。").font(.callout)
       BroadcastPicker().frame(width:56,height:56)
      }
@@ -85,7 +125,12 @@ struct Home:View{
        }.glassButton()
        Button(m.testing ? "测试中…" : "测试连接"){m.test()}.disabled(m.testing || m.key.isEmpty).glassButton()
       }
+      Text("共享钥匙串不通时仍可保存和测试连接，但广播扩展读不到 Key，不能广播。").font(.caption).foregroundStyle(.secondary)
       if !m.message.isEmpty{Text(m.message).font(.caption).foregroundStyle(.secondary)}
+      DisclosureGroup("诊断信息",isExpanded:$m.diagOpen){
+       Text(m.diagnostic).font(.system(.caption2,design:.monospaced)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)
+       Button("复制诊断"){UIPasteboard.general.string=m.diagnostic}.glassButton()
+      }.font(.callout)
      }
      GlassCard{
       HStack{Text("会话存档").font(.title3.bold());Spacer();Button("刷新"){m.refresh()}.glassButton()}

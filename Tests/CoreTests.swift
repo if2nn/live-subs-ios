@@ -6,6 +6,24 @@ import Foundation
   ["text": text, "translation_status": lane, "is_final": final, "start_ms": start, "end_ms": end]
  }
  static func main() throws {
+  let profile: [String:Any] = ["Entitlements":["com.apple.security.application-groups":["group.renamed.TEAM123"],"keychain-access-groups":["TEAM123.shared"],"application-identifier":"TEAM123.com.example"]]
+  let xml = try PropertyListSerialization.data(fromPropertyList:profile,format:.xml,options:0)
+  var envelope = Data([0x30,0x82,0x00,0x01]);envelope.append(xml);envelope.append(Data([0x00]))
+  let hints = ProfileHints.decode(envelope)
+  precondition(ProfileHints.identifiers(hints["com.apple.security.application-groups"]) == ["group.renamed.TEAM123"])
+  precondition(ProfileHints.decode(Data()).isEmpty)
+  precondition(ProfileHints.decode(Data(repeating:0,count:2_097_153)).isEmpty)
+  precondition(ProfileHints.identifiers(["group.good","bad/*","$(TEAM).group","../unsafe"]) == ["group.good"])
+  // Slash-containing identifiers must be rejected even when dots are valid.
+  precondition(ProfileHints.identifiers(["../unsafe"]).isEmpty)
+  var duplicate = xml;duplicate.append(xml)
+  precondition(ProfileHints.decode(duplicate).isEmpty)
+  let entity = Data("<?xml version=\"1.0\"?><!DOCTYPE plist [<!ENTITY x SYSTEM \"file:///private\">]><plist><dict/></plist>".utf8)
+  precondition(ProfileHints.decode(entity).isEmpty)
+  let candidates=ProfileHints.candidates(profile:hints,configured:["group.com.aian.livesubs"],bundleID:"com.aian.livesubs.TEAM123.broadcast",prefix:"TEAM123")
+  precondition(candidates.first == "group.renamed.TEAM123")
+  precondition(candidates.contains("group.com.aian.livesubs.TEAM123"))
+  precondition(Set(candidates).count == candidates.count)
   precondition(SRT.time(3661234) == "01:01:01,234")
   precondition(SRT.time(-1) == "00:00:00,000")
   precondition([400,401,402,403].allSatisfy { SonioxRetry.isFatal($0) })

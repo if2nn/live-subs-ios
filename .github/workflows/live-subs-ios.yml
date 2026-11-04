@@ -31,7 +31,7 @@ jobs:
       - name: Core assertions
         run: |
           python3 Tests/static_checks.py
-          swiftc -parse-as-library -swift-version 6 -strict-concurrency=complete Shared/Transcript.swift Tests/CoreTests.swift -o /tmp/core-tests
+          swiftc -parse-as-library -swift-version 6 -strict-concurrency=complete Shared/Transcript.swift Shared/Profile.swift Tests/CoreTests.swift -o /tmp/core-tests
           /tmp/core-tests
       - name: Build unsigned device app
         run: |
