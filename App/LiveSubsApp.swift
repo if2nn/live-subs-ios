@@ -35,6 +35,7 @@ struct RootView: View {
    pip.settings = settings.settings
    #if DEBUG
    if ProcessInfo.processInfo.arguments.contains("--ui-testing-seed-history") { history.seedForUITests() }
+   if ProcessInfo.processInfo.arguments.contains("--ui-testing-seed-caption") { pip.enableCaptionFixture() }
    #endif
    history.refresh()
   }
@@ -60,11 +61,16 @@ struct LiveView: View {
       Text("系统声音只送往你自己的 Soniox 账户。").foregroundStyle(.secondary)
      }
      VideoSurface(pip: pip)
-      .aspectRatio(CGFloat(CaptionRenderer.width) / CGFloat(CaptionRenderer.height(for: settings.settings)), contentMode: .fit)
+      .aspectRatio(CGFloat(CaptionCanvas.aspect), contentMode: .fit)
       .frame(maxWidth: .infinity)
       .background(Color.black)
       .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
       .accessibilityIdentifier("pip.preview")
+     #if DEBUG
+     if ProcessInfo.processInfo.arguments.contains("--ui-testing") {
+      Text(pip.frameLabel).font(.caption2.monospaced()).foregroundStyle(.secondary).accessibilityIdentifier("pip.frame.size")
+     }
+     #endif
 
      if pip.phase == .stopped || pip.phase == .stale {
       SectionCard {

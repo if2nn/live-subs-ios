@@ -22,6 +22,16 @@ Built with Swift 6 (strict concurrency), SwiftUI, Observation (`@Observable`) an
 5. **历史** (History) keeps the full caption text of every session inside the app. You can view it as bilingual, original only or translation only. You can copy it, share it as .txt or .srt, or delete it. Swipe or use the trash button to delete. A deleted session is never re-imported.
 6. **诊断** (Diagnostics) shows signing and shared-container probes and extension heartbeat counters. It also shows the audio format, levels and sent bytes, and Soniox processed-audio milliseconds. Diagnostics can be copied or exported. They never contain the key, caption text or audio.
 
+## Preview 5 changes
+
+- **Sharper PiP captions.** Preview 4 drew a 1280-pixel-wide frame (1280×404), with font sizes in raw pixels, a black stroke and a blurred shadow. The stroke and shadow ate into glyph edges on the black canvas.
+  - Captions are now laid out in points on a fixed 480×160 pt strip (`Shared/CaptionLayout.swift`) and rasterised at the screen scale: 1440×480 on a 3x iPhone.
+  - When AVKit reports the PiP render size (`didTransitionToRenderSize`), the frame is re-rendered at exactly the pixels it occupies in that window, so it is shown 1:1.
+  - Stroke and blur are gone, line heights are fixed, and text uses subpixel glyph positioning.
+  - Diagnostics record `pip.screen.scale`, `pip.renderSize.*` and `pip.frame.*`.
+- **Caption strip.** The PiP window is a 3:1 strip, wide and flat, about two lines per lane in bilingual mode at the default size. Larger fonts reduce the line count or scale down to fit.
+- **Tests.** FeatureTests check the canvas size per screen scale and render size, plus the typography budget. A simulator UI test checks that the frame is 480 pt × the screen scale and 3:1, and CI keeps the rendered frame PNG as evidence. The simulator is not the device: Ian confirms real PiP sharpness.
+
 ## Preview 4 changes
 
 ### Captions now come out (audio path rewrite)

@@ -48,7 +48,8 @@ def collect():
             dest = OUT / "Documents-diagnostics"
             dest.mkdir(exist_ok=True)
             for file in (container / "Documents").rglob("*"):
-                if file.is_file() and ("diagnostic" in file.name.lower() or file.suffix == ".log"):
+                if file.is_file() and ("diagnostic" in file.name.lower() or file.suffix == ".log"
+                                       or (file.name.startswith("caption-frame-") and file.suffix == ".png")):
                     target = dest / file.relative_to(container / "Documents")
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(file, target)
@@ -78,6 +79,10 @@ def collect():
                 OUT / "Documents-diagnostics/diagnostics.log"]
     if not all(path.exists() for path in required):
         raise RuntimeError("Required simulator evidence missing")
+    frames = sorted((OUT / "Documents-diagnostics").glob("caption-frame-*.png"))
+    if not frames:
+        raise RuntimeError("Required caption frame evidence missing")
+    (OUT / "caption-frames.txt").write_text("\n".join(f.name for f in frames) + "\n")
 
 def test():
     OUT.mkdir(exist_ok=True)

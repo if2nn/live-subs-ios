@@ -24,6 +24,8 @@ final class CaptionPiP: NSObject, AVPictureInPictureControllerDelegate, AVPictur
  var captureStatus = "未开始录屏"
  var caption = Caption()
  var settings = AppSettings()
+ /// Pixel size of the last frame sent to PiP, e.g. "1440x480 @3x" (diagnostics, UI tests).
+ var frameLabel = ""
 
  let layer = AVSampleBufferDisplayLayer()
  @ObservationIgnored private var controller: AVPictureInPictureController?
@@ -72,10 +74,32 @@ final class CaptionPiP: NSObject, AVPictureInPictureControllerDelegate, AVPictur
   observers.forEach { NotificationCenter.default.removeObserver($0) }
  }
 
+ #if DEBUG
+ /// UI tests only (--ui-testing-seed-caption): a fixed bilingual caption and
+ /// a PNG of the first rendered frame per size in Documents, so CI keeps
+ /// pixel-exact evidence of the strip. Not device evidence of PiP sharpness.
+ func enableCaptionFixture() {
+  var c = Caption(original: "We tested the floating captions on a real phone today.",
+                  translated: "今天我们在真机上测试了悬浮字幕。", status: "UI test", seq: 1, session: "UITEST")
+  c.originalLive = c.original; c.translatedLive = c.translated
+  caption = c
+  fixture = true
+  renderer.debugFrameSink = { canvas, png in
+   guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+   try? png.write(to: docs.appendingPathComponent("caption-frame-\(canvas.pixelWidth)x\(canvas.pixelHeight).png"))
+  }
+  forceRender = true
+ }
+ @ObservationIgnored private var fixture = false
+ #endif
+
  // MARK: Layer hosting
 
  func attach(to view: UIView) {
   surface = view
+  let scale = Double(view.traitCollection.displayScale)
+  if scale >= 1 { renderer.screenScale = scale }
+  Diagnostics.record("pip.screen.scale", code: Int((renderer.screenScale * 100).rounded()))
   Diagnostics.record("pip.attach.before")
   if layer.superlayer !== view.layer { view.layer.addSublayer(layer) }
   layer.frame = view.bounds
@@ -168,6 +192,14 @@ final class CaptionPiP: NSObject, AVPictureInPictureControllerDelegate, AVPictur
   if !launcher.open() { status = "请点录屏按钮" }
  }
 
+ private var fixtureActive: Bool {
+  #if DEBUG
+  return fixture
+  #else
+  return false
+  #endif
+ }
+
  private var appActive: Bool { UIApplication.shared.applicationState == .active }
 
  private func apply(_ action: PiPStartPolicy.Action) {
@@ -232,7 +264,7 @@ final class CaptionPiP: NSObject, AVPictureInPictureControllerDelegate, AVPictur
 
  private func tick() {
   let now = CACurrentMediaTime()
-  if let latest = Store.read(), latest.seq != caption.seq || latest.session != caption.session || latest.original != caption.original || latest.translated != caption.translated || latest.status != caption.status {
+  if !fixtureActive, let latest = Store.read(), latest.seq != caption.seq || latest.session != caption.session || latest.original != caption.original || latest.translated != caption.translated || latest.status != caption.status {
    caption = latest
   }
   if now - lastSnapshotRead >= 1 {
@@ -309,10 +341,13 @@ final class CaptionPiP: NSObject, AVPictureInPictureControllerDelegate, AVPictur
                         Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
   }
   guard layer.isReadyForMoreMediaData else { return }
-  if !loggedFirstFrame {
+  let label = renderer.lastCanvas?.label ?? ""
+  if !loggedFirstFrame || label != frameLabel {
    Diagnostics.record("pip.frame.width", code: CVPixelBufferGetWidth(pixel))
    Diagnostics.record("pip.frame.height", code: CVPixelBufferGetHeight(pixel))
+   Diagnostics.record("pip.frame.scale", code: Int(((renderer.lastCanvas?.scale ?? 0) * 100).rounded()))
    Diagnostics.record("pip.frame.subtype", code: Int(CMFormatDescriptionGetMediaSubType(format)))
+   frameLabel = label
   }
   layer.enqueue(sample)
   lastContent = content; lastRender = now; forceRender = false
@@ -345,7 +380,19 @@ final class CaptionPiP: NSObject, AVPictureInPictureControllerDelegate, AVPictur
   CMTimeRange(start: .negativeInfinity, duration: .positiveInfinity)
  }
  nonisolated func pictureInPictureControllerIsPlaybackPaused(_ pictureInPictureController: AVPictureInPictureController) -> Bool { false }
- nonisolated func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, didTransitionToRenderSize newRenderSize: CMVideoDimensions) {}
+ /// AVKit reports the PiP window's render size in pixels. Re-render the strip
+ /// at exactly the pixels it occupies there so text is never resampled.
+ nonisolated func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, didTransitionToRenderSize newRenderSize: CMVideoDimensions) {
+  let w = Int(newRenderSize.width), h = Int(newRenderSize.height)
+  Diagnostics.record("pip.renderSize.width", code: w)
+  Diagnostics.record("pip.renderSize.height", code: h)
+  Task { @MainActor [weak self] in
+   guard let self else { return }
+   self.renderer.renderSize = (w > 0 && h > 0) ? (w, h) : nil
+   self.forceRender = true
+   self.render(now: CACurrentMediaTime())
+  }
+ }
  nonisolated func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, skipByInterval skipInterval: CMTime, completion completionHandler: @escaping () -> Void) {
   completionHandler()
  }
@@ -383,6 +430,7 @@ final class CaptionPiP: NSObject, AVPictureInPictureControllerDelegate, AVPictur
    self.startPolicy.didStop()
    self.isActive = false
    if self.armed { self.status = "悬浮字幕已关闭；点「开始」可再次开启" }
+   self.renderer.renderSize = nil
    self.forceRender = true
   }
  }

@@ -217,6 +217,49 @@ import Foundation
   let old = try JSONDecoder().decode(Caption.self, from: Data(#"{"original":"a","translated":"b","status":"s","updated":0,"seq":1,"session":""}"#.utf8))
   check(old.originalLive == nil, "older caption files still decode")
 
-  print("FeatureTests PASS (\(checks) checks: audio decode/resample, Soniox config, settings, history, captions)")
+  // 7) Caption strip geometry and render size (preview 5: sharp, wide and flat).
+  let c3 = CaptionCanvas.make(screenScale: 3)
+  check(c3.pixelWidth == 1440 && c3.pixelHeight == 480 && c3.scale == 3, "3x screen renders 1440x480 (480x160 pt)")
+  let c2 = CaptionCanvas.make(screenScale: 2)
+  check(c2.pixelWidth == 960 && c2.pixelHeight == 320 && c2.scale == 2, "2x screen renders 960x320")
+  check(CaptionCanvas.aspect == 3, "strip is 3:1, wider than tall")
+  check(CaptionCanvas.make(screenScale: .nan).pixelWidth == 1440, "unknown scale falls back to 3x")
+  check(c3.label == "1440x480 @3x", c3.label)
+  // PiP render size: match the pixels the aspect-fit frame occupies, 1:1.
+  let wide = CaptionCanvas.make(screenScale: 3, renderSize: (width: 1080, height: 600))
+  check(wide.pixelWidth == 1080 && wide.pixelHeight == 360, "width-limited PiP window: \(wide.label)")
+  let tall = CaptionCanvas.make(screenScale: 3, renderSize: (width: 2000, height: 300))
+  check(tall.pixelWidth == 900 && tall.pixelHeight == 300, "height-limited PiP window: \(tall.label)")
+  let huge = CaptionCanvas.make(screenScale: 3, renderSize: (width: 9000, height: 9000))
+  check(huge.pixelWidth == CaptionCanvas.maxPixelWidth && huge.pixelHeight * 3 == huge.pixelWidth, "render size clamped")
+  let tiny = CaptionCanvas.make(screenScale: 3, renderSize: (width: 100, height: 40))
+  check(tiny.pixelWidth == CaptionCanvas.minPixelWidth, "render size floor")
+  for w in [1, 333, 1081, 1279, 1441, 2399] {
+   let c = CaptionCanvas.make(screenScale: 3, renderSize: (width: w, height: 5000))
+   check(c.pixelWidth % 6 == 0 && c.pixelHeight % 2 == 0 && c.pixelHeight * 3 == c.pixelWidth, "even 3:1 buffer for \(w)")
+  }
+  check(c3.pixelWidth != 1280 && c3.pixelHeight != 404, "no longer the preview 4 1280x404 frame")
+
+  // Typography: default bilingual fits two lines per lane in the strip.
+  var ty = AppSettings()
+  let tDefault = CaptionTypography.make(ty, hasNotice: false, hasCaption: true)
+  check(tDefault.mainPoints == 22.5 && abs(tDefault.secondaryPoints - 17.55) < 0.001, "default 22.5/17.55 pt")
+  check(tDefault.lines == 2, "default bilingual: two lines per lane, got \(tDefault.lines)")
+  let budget = CaptionCanvas.pointHeight - 2 * CaptionTypography.verticalPadding
+  check(tDefault.textHeight(display: .bilingual) <= budget, "bilingual text fits the strip")
+  let tNote = CaptionTypography.make(ty, hasNotice: true, hasCaption: true)
+  check(tNote.textHeight(display: .bilingual) + tNote.noticeHeight <= budget && tNote.lines >= 1, "fits with footnote")
+  ty.style.fontSize = 48; ty.style.lines = 4
+  let tBig = CaptionTypography.make(ty, hasNotice: true, hasCaption: true)
+  check(tBig.lines >= 1 && tBig.textHeight(display: .bilingual) + tBig.noticeHeight <= budget + 0.5, "largest font still fits: \(tBig)")
+  ty.display = .translationOnly
+  let tOnly = CaptionTypography.make(ty, hasNotice: false, hasCaption: true)
+  check(tOnly.lines >= 2 && tOnly.textHeight(display: .translationOnly) <= budget, "translation-only uses the height")
+  ty.style.lines = 1; ty.style.fontSize = 18; ty.display = .bilingual
+  check(CaptionTypography.make(ty, hasNotice: false, hasCaption: true).lines == 1, "user line limit respected")
+  let empty = CaptionTypography.make(AppSettings(), hasNotice: true, hasCaption: false)
+  check(empty.noticeHeight == 0 && empty.noticePoints >= 14, "empty window: centred, legible message")
+
+  print("FeatureTests PASS (\(checks) checks: audio decode/resample, Soniox config, settings, history, captions, caption strip geometry)")
  }
 }

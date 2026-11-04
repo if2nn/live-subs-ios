@@ -42,7 +42,7 @@ for folder, filename in [("App", "LiveSubs.entitlements"), ("Broadcast", "Broadc
     check(ent["com.apple.security.application-groups"] == ["group.com.aian.livesubs"], "declared app group")
     check("keychain-access-groups" not in ent, "no unresolved AppIdentifierPrefix")
     check(b"$(" not in plistlib.dumps(ent), "concrete entitlement metadata")
-    check(info["CFBundleVersion"] == "4", "preview 4 build version")
+    check(info["CFBundleVersion"] == "5", "preview 5 build version")
 check('audio' in plistlib.loads((root / 'App/Info.plist').read_bytes())['UIBackgroundModes'], "PiP background audio mode")
 
 # Audio path: explicit decoding, no AVAudioConverter guesswork.
@@ -92,6 +92,10 @@ check('DiagnosticsView' in app, "diagnostics page kept")
 check('.buttonStyle(.glassProminent)' in app and '.buttonStyle(.glass)' in app, "Liquid Glass on controls")
 check('.glassEffect(' not in app, "HIG: no Liquid Glass in the content layer")
 _renderer = text("App/CaptionRenderer.swift")
+check("CaptionCanvas.make(screenScale:" in _renderer and "context.scaleBy(x: CGFloat(canvas.scale)" in _renderer, "render in points at screen scale")
+check(".strokeWidth" not in _renderer and "shadowBlurRadius" not in _renderer, "no stroke/blur softening glyph edges")
+check("didTransitionToRenderSize" in text("App/CaptionPiP.swift") and "renderer.renderSize =" in text("App/CaptionPiP.swift"), "PiP render size drives the frame")
+check("static let width = 1280" not in _renderer, "fixed 1280 px canvas removed")
 check("var originalLive" in _renderer and "var translatedLive" in _renderer and "content.originalLive" in _renderer, "renderer content carries live sentence")
 check('@Observable' in stores and '@Observable' in pip, "Observation models")
 check('ObservableObject' not in app + pip + stores, "no legacy ObservableObject")
@@ -120,7 +124,7 @@ if not compiler:
 with tempfile.TemporaryDirectory() as tmp:
     exe = str(Path(tmp) / "feature-tests")
     subprocess.run([compiler, "-parse-as-library", "-swift-version", "6", "-strict-concurrency=complete",
-                    *[str(root / f) for f in ["Shared/AudioPCM.swift", "Shared/Settings.swift", "Shared/History.swift",
+                    *[str(root / f) for f in ["Shared/AudioPCM.swift", "Shared/Settings.swift", "Shared/History.swift", "Shared/CaptionLayout.swift",
                                               "Shared/Transcript.swift", "Tests/FeatureTests.swift"]],
                     "-o", exe], check=True)
     subprocess.run([exe], check=True)

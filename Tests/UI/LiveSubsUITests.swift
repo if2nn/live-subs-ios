@@ -82,6 +82,37 @@ final class LiveSubsUITests: XCTestCase {
   XCTAssertEqual(app.state, .runningForeground)
  }
 
+ /// Preview 5: the caption strip is rasterised at the screen scale and is a
+ /// wide 3:1 strip. Simulator evidence only; real-device sharpness is Ian's call.
+ func testCaptionStripRendersAtScreenScale() throws {
+  launch(["--ui-testing-seed-caption"])
+  defer { capture("caption-strip") }
+  openTab("字幕")
+  let size = app.staticTexts["pip.frame.size"]
+  XCTAssertTrue(wait(size, timeout: 10) { !$0.label.isEmpty }, "a frame was rendered")
+  // Screen scale = screenshot pixels / window points (independent of UIImage.scale).
+  let shot = XCUIScreen.main.screenshot().image
+  let px = min(shot.size.width, shot.size.height) * shot.scale
+  let window = app.windows.firstMatch.frame
+  let scale = Int((px / max(min(window.width, window.height), 1)).rounded())
+  let label = size.label
+  note("Caption frame: \(label); simulator screen scale \(scale)x")
+  let parts = label.split(separator: " ")
+  let dims = parts.first?.split(separator: "x").compactMap { Int($0) } ?? []
+  XCTAssertEqual(dims.count, 2, label)
+  guard dims.count == 2 else { return }
+  XCTAssertEqual(dims[0], 480 * scale, "frame width = 480 pt x screen scale: \(label)")
+  XCTAssertEqual(dims[0], dims[1] * 3, "3:1 strip: \(label)")
+  XCTAssertTrue(label.hasSuffix("@\(scale)x"), label)
+  XCTAssertFalse(label.hasPrefix("1280x"), "not the preview 4 canvas")
+  let preview = app.otherElements["pip.preview"].firstMatch
+  if preview.exists {
+   let f = preview.frame
+   XCTAssertEqual(f.width / max(f.height, 1), 3, accuracy: 0.15, "in-app preview keeps the strip shape: \(f)")
+  }
+  XCTAssertEqual(app.state, .runningForeground)
+ }
+
  func testSettingsKeyLanguagesDisplayAndStylePersist() throws {
   launch()
   defer { capture("settings-final") }
