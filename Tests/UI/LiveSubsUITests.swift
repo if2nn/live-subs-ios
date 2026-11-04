@@ -32,10 +32,12 @@ final class LiveSubsUITests: XCTestCase {
   let a = XCTAttachment(string: text); a.lifetime = .keepAlways; add(a)
  }
  private func openTab(_ name: String) {
-  let tab = app.tabBars.buttons[name]
-  if tab.waitForExistence(timeout: 5) { tab.tap(); return }
+  // iOS 27 simulators do not expose the SwiftUI tab bar as `tabBars`; waiting
+  // on that query first cost 5 s and several full accessibility snapshots per
+  // call (each failed wait captures a debug description), which pushed slow
+  // runners into "Timed out while evaluating UI query". Query the button directly.
   let button = app.buttons[name].firstMatch
-  XCTAssertTrue(button.waitForExistence(timeout: 5), "tab \(name)")
+  XCTAssertTrue(button.waitForExistence(timeout: 15), "tab \(name)")
   button.tap()
  }
  private func reveal(_ element: XCUIElement, up: Bool = true) {
