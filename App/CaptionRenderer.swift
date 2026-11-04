@@ -11,6 +11,8 @@ final class CaptionRenderer {
  struct Content: Equatable {
   var original: String
   var translated: String
+  var originalLive = ""
+  var translatedLive = ""
   var notice: String
   var settings: AppSettings
  }

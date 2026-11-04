@@ -91,6 +91,8 @@ for ident in ["settings.fontSize", "settings.lines", "settings.translationColor"
 check('DiagnosticsView' in app, "diagnostics page kept")
 check('.buttonStyle(.glassProminent)' in app and '.buttonStyle(.glass)' in app, "Liquid Glass on controls")
 check('.glassEffect(' not in app, "HIG: no Liquid Glass in the content layer")
+_renderer = text("App/CaptionRenderer.swift")
+check("var originalLive" in _renderer and "var translatedLive" in _renderer and "content.originalLive" in _renderer, "renderer content carries live sentence")
 check('@Observable' in stores and '@Observable' in pip, "Observation models")
 check('ObservableObject' not in app + pip + stores, "no legacy ObservableObject")
 check('Store.writeHistory' in handler and 'importShared' in stores, "history written by extension, imported by app")
