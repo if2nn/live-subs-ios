@@ -20,6 +20,14 @@ final class LiveSubsUITests: XCTestCase {
   attachment.name = name; attachment.lifetime = .keepAlways
   add(attachment)
  }
+ /// A switch's value is "1"/"0" as a String on some runtimes and an NSNumber on others.
+ private static func isOn(_ element: XCUIElement) -> Bool {
+  switch element.value {
+  case let s as String: return s == "1"
+  case let n as NSNumber: return n.intValue == 1
+  default: return false
+  }
+ }
  private func note(_ text: String) {
   let a = XCTAttachment(string: text); a.lifetime = .keepAlways; add(a)
  }
@@ -166,18 +174,18 @@ final class LiveSubsUITests: XCTestCase {
   XCTAssertTrue(order.exists)
   // Tap once and let the value settle before deciding on a second attempt,
   // otherwise a slow update reads as "0" and the retry flips it back.
-  if (order.value as? String) != "1" {
+  if !Self.isOn(order) {
    // SwiftUI exposes the row as a Switch whose centre is the label; the real
    // UISwitch is a nested Switch. Tap that one (known iOS 18+ behaviour).
    let knob = order.switches.firstMatch
    (knob.exists ? knob : order).tap()
-   if !wait(order, timeout: 4, { ($0.value as? String) == "1" }) {
+   if !wait(order, timeout: 4, { Self.isOn($0) }) {
     let frame = order.frame
     order.coordinate(withNormalizedOffset: .zero)
      .withOffset(CGVector(dx: frame.width - 30, dy: frame.height / 2)).tap()
    }
   }
-  XCTAssertTrue(wait(order, timeout: 4) { ($0.value as? String) == "1" }, "order toggle switched on: \(String(describing: order.value))")
+  XCTAssertTrue(wait(order, timeout: 4) { Self.isOn($0) }, "order toggle switched on: \(String(describing: order.value))")
   let position = app.segmentedControls["settings.position"]
   reveal(position)
   position.buttons["顶部"].tap()
