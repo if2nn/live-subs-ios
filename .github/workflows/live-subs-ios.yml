@@ -1,0 +1,50 @@
+name: Live Subs iOS
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'App/**'
+      - 'Shared/**'
+      - 'Broadcast/**'
+      - 'Tests/**'
+      - 'project.yml'
+      - '*.plist'
+      - '.github/workflows/live-subs-ios.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate project
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+      - name: Core assertions
+        run: |
+          python3 Tests/static_checks.py
+          swiftc Shared/Transcript.swift Tests/CoreTests.swift -o /tmp/core-tests
+          /tmp/core-tests
+      - name: Build unsigned device app
+        run: |
+          set -o pipefail
+          xcodebuild -project LiveSubs.xcodeproj -scheme LiveSubs -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tee build.log
+      - name: Package IPA
+        run: |
+          mkdir -p dist/Payload
+          cp -R build/Build/Products/Release-iphoneos/LiveSubs.app dist/Payload/
+          test -d dist/Payload/LiveSubs.app/PlugIns/Broadcast.appex
+          cd dist
+          zip -qr LiveSubs-unsigned.ipa Payload
+          shasum -a 256 LiveSubs-unsigned.ipa > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LiveSubs-iOS
+          path: |
+            dist/*.ipa
+            dist/SHA256SUMS
+            build.log
+          retention-days: 14

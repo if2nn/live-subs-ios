@@ -1,0 +1,36 @@
+name: LiveSubs
+options:
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGNING_ALLOWED: NO
+    TARGETED_DEVICE_FAMILY: "1,2"
+targets:
+  LiveSubs:
+    type: application
+    platform: iOS
+    sources: [App, Shared]
+    info:
+      path: App/Info.plist
+    entitlements:
+      path: App/LiveSubs.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aian.livesubs
+    dependencies:
+      - target: Broadcast
+        embed: true
+  Broadcast:
+    type: app-extension
+    platform: iOS
+    sources: [Broadcast, Shared]
+    info:
+      path: Broadcast/Info.plist
+    entitlements:
+      path: Broadcast/Broadcast.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aian.livesubs.broadcast
+        APPLICATION_EXTENSION_API_ONLY: YES
