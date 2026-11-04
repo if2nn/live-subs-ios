@@ -9,8 +9,9 @@ import CoreVideo
 /// The PiP canvas is always opaque black (system PiP windows cannot be transparent).
 ///
 /// Preview 5 sharpness changes (Ian: preview 4 text was very blurry at 1280×404):
-/// - layout in points on a fixed 480×160 pt strip (`CaptionCanvas`), rasterised
-///   at the screen scale (1440×480 on a 3x iPhone) and, once AVKit reports the
+/// - layout in points on a 480 pt-wide canvas (`CaptionCanvas`: the classic
+///   shape, or the optional 480×160 pt strip), rasterised at the screen scale
+///   (1440 px wide on a 3x iPhone) and, once AVKit reports the
 ///   PiP render size, at exactly the pixels the frame occupies there, so the
 ///   compositor does not resample the text;
 /// - no black stroke and no blurred shadow: on a black canvas they only ate into
@@ -36,13 +37,15 @@ final class CaptionRenderer {
  #if DEBUG
  /// UI tests only: receives the first frame of each canvas size as PNG data.
  var debugFrameSink: ((CaptionCanvas, Data) -> Void)?
- private var exportedSizes: Set<Int> = []
+ private var exportedSizes: Set<String> = []
  #endif
 
  private var pool: CVPixelBufferPool?
  private var poolCanvas: CaptionCanvas?
 
- var canvas: CaptionCanvas { CaptionCanvas.make(screenScale: screenScale, renderSize: renderSize) }
+ func canvas(for settings: AppSettings) -> CaptionCanvas {
+  CaptionCanvas.make(screenScale: screenScale, settings: settings, renderSize: renderSize)
+ }
 
  private func buffer(_ canvas: CaptionCanvas) -> CVPixelBuffer? {
   if pool == nil || poolCanvas != canvas {
@@ -113,7 +116,7 @@ final class CaptionRenderer {
  func render(_ content: Content) -> CVPixelBuffer? {
   let settings = content.settings.normalized()
   let s = settings.style
-  let canvas = self.canvas
+  let canvas = canvas(for: settings)
   guard let pixel = buffer(canvas) else { return nil }
   CVPixelBufferLockBaseAddress(pixel, [])
   defer { CVPixelBufferUnlockBaseAddress(pixel, []) }
@@ -132,7 +135,7 @@ final class CaptionRenderer {
   UIGraphicsPushContext(context)
   defer { UIGraphicsPopContext() }
 
-  let W = CGFloat(CaptionCanvas.pointWidth), H = CGFloat(CaptionCanvas.pointHeight)
+  let W = CGFloat(CaptionCanvas.pointWidth), H = CGFloat(canvas.pointHeight)
   let hasCaptionText: Bool
   switch settings.display {
   case .originalOnly: hasCaptionText = !content.original.isEmpty
@@ -199,9 +202,9 @@ final class CaptionRenderer {
   }
   lastCanvas = canvas
   #if DEBUG
-  if let sink = debugFrameSink, !exportedSizes.contains(canvas.pixelWidth), shown > 0,
+  if let sink = debugFrameSink, !exportedSizes.contains(canvas.label), shown > 0,
      let image = context.makeImage(), let png = UIImage(cgImage: image).pngData() {
-   exportedSizes.insert(canvas.pixelWidth)
+   exportedSizes.insert(canvas.label)
    sink(canvas, png)
   }
   #endif

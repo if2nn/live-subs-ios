@@ -24,13 +24,16 @@ Built with Swift 6 (strict concurrency), SwiftUI, Observation (`@Observable`) an
 
 ## Preview 5 changes
 
-- **Sharper PiP captions.** Preview 4 drew a 1280-pixel-wide frame (1280×404), with font sizes in raw pixels, a black stroke and a blurred shadow. The stroke and shadow ate into glyph edges on the black canvas.
-  - Captions are now laid out in points on a fixed 480×160 pt strip (`Shared/CaptionLayout.swift`) and rasterised at the screen scale: 1440×480 on a 3x iPhone.
+- **Sharper PiP captions, in both shapes.** Preview 4 drew a fixed 1280-pixel-wide frame (1280×404), with font sizes in raw pixels, a black stroke and a blurred shadow. The stroke and shadow ate into glyph edges on the black canvas.
+  - Captions are now laid out in points on a 480 pt-wide canvas (`Shared/CaptionLayout.swift`) and rasterised at the screen scale: 1440 px wide on a 3x iPhone.
   - When AVKit reports the PiP render size (`didTransitionToRenderSize`), the frame is re-rendered at exactly the pixels it occupies in that window, so it is shown 1:1.
   - Stroke and blur are gone, line heights are fixed, and text uses subpixel glyph positioning.
   - Diagnostics record `pip.screen.scale`, `pip.renderSize.*` and `pip.frame.*`.
-- **Caption strip.** The PiP window is a 3:1 strip, wide and flat, about two lines per lane in bilingual mode at the default size. Larger fonts reduce the line count or scale down to fit.
-- **Tests.** FeatureTests check the canvas size per screen scale and render size, plus the typography budget. A simulator UI test checks that the frame is 480 pt × the screen scale and 3:1, and CI keeps the rendered frame PNG as evidence. The simulator is not the device: Ian confirms real PiP sharpness.
+- **PiP window shape (Settings → 显示 → 悬浮窗形状).**
+  - 经典 (classic) is the preview 4 shape and stays the default: its height follows font size, line count and display mode. At default settings that is 480×150 pt, 1440×450 @3x.
+  - 长条 (strip) is optional: a wide, flat 480×112 pt bar (about 4.3:1, 1440×336 @3x), a little taller than a one-line strip. At the default size it holds one translation line and one original line; larger fonts scale down to fit.
+  - Saved preview 4 settings keep their values and default to classic.
+- **Tests.** FeatureTests check the canvas size per screen scale, render size and shape, the typography budget across shape, mode, font and line count, and settings migration. A simulator UI test checks both shapes at 480 pt × the screen scale and switching back and forth, and CI keeps the rendered frame PNGs as evidence. The simulator is not the device: Ian confirms real PiP sharpness.
 
 ## Preview 4 changes
 

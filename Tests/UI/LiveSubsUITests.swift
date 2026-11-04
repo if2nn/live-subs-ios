@@ -82,11 +82,11 @@ final class LiveSubsUITests: XCTestCase {
   XCTAssertEqual(app.state, .runningForeground)
  }
 
- /// Preview 5: the caption strip is rasterised at the screen scale and is a
- /// wide 3:1 strip. Simulator evidence only; real-device sharpness is Ian's call.
- func testCaptionStripRendersAtScreenScale() throws {
+ /// Preview 5: captions are rasterised at the screen scale in both shapes;
+ /// the classic (preview 4) shape is the default and the strip is optional.
+ /// Simulator evidence only; real-device PiP sharpness is Ian's call.
+ func testCaptionWindowShapesRenderAtScreenScale() throws {
   launch(["--ui-testing-seed-caption"])
-  defer { capture("caption-strip") }
   openTab("字幕")
   let size = app.staticTexts["pip.frame.size"]
   XCTAssertTrue(wait(size, timeout: 10) { !$0.label.isEmpty }, "a frame was rendered")
@@ -95,21 +95,43 @@ final class LiveSubsUITests: XCTestCase {
   let px = min(shot.size.width, shot.size.height) * shot.scale
   let window = app.windows.firstMatch.frame
   let scale = Int((px / max(min(window.width, window.height), 1)).rounded())
-  let label = size.label
-  note("Caption frame: \(label); simulator screen scale \(scale)x")
-  let parts = label.split(separator: " ")
-  let dims = parts.first?.split(separator: "x").compactMap { Int($0) } ?? []
-  XCTAssertEqual(dims.count, 2, label)
-  guard dims.count == 2 else { return }
-  XCTAssertEqual(dims[0], 480 * scale, "frame width = 480 pt x screen scale: \(label)")
-  XCTAssertEqual(dims[0], dims[1] * 3, "3:1 strip: \(label)")
-  XCTAssertTrue(label.hasSuffix("@\(scale)x"), label)
-  XCTAssertFalse(label.hasPrefix("1280x"), "not the preview 4 canvas")
-  let preview = app.otherElements["pip.preview"].firstMatch
-  if preview.exists {
-   let f = preview.frame
-   XCTAssertEqual(f.width / max(f.height, 1), 3, accuracy: 0.15, "in-app preview keeps the strip shape: \(f)")
+  func dims(_ label: String) -> (Int, Int)? {
+   let d = label.split(separator: " ").first?.split(separator: "x").compactMap { Int($0) } ?? []
+   return d.count == 2 ? (d[0], d[1]) : nil
   }
+  let classicLabel = size.label
+  note("Classic caption frame: \(classicLabel); simulator screen scale \(scale)x")
+  capture("caption-classic")
+  guard let classic = dims(classicLabel) else { return XCTFail(classicLabel) }
+  XCTAssertEqual(classic.0, 480 * scale, "classic width = 480 pt x screen scale: \(classicLabel)")
+  XCTAssertTrue(classicLabel.hasSuffix("@\(scale)x"), classicLabel)
+  XCTAssertFalse(classicLabel.hasPrefix("1280x"), "not the fixed 1280 px preview 4 frame")
+
+  openTab("设置")
+  let shape = app.segmentedControls["settings.pipShape"]
+  reveal(shape)
+  XCTAssertTrue(shape.exists, "shape switch in Settings")
+  XCTAssertTrue(shape.buttons["经典"].isSelected, "classic is the default")
+  shape.buttons["长条"].tap()
+  XCTAssertTrue(wait(shape.buttons["长条"]) { $0.isSelected })
+  capture("settings-shape-strip")
+
+  openTab("字幕")
+  XCTAssertTrue(wait(size, timeout: 10) { $0.label != classicLabel }, "frame re-rendered for the strip")
+  let stripLabel = size.label
+  note("Strip caption frame: \(stripLabel)")
+  capture("caption-strip")
+  guard let strip = dims(stripLabel) else { return XCTFail(stripLabel) }
+  XCTAssertEqual(strip.0, 480 * scale, "strip width = 480 pt x screen scale: \(stripLabel)")
+  XCTAssertEqual(strip.1, 112 * scale, "strip height = 112 pt x screen scale: \(stripLabel)")
+  XCTAssertGreaterThan(Double(strip.0) / Double(strip.1), Double(classic.0) / Double(classic.1), "strip is wider and flatter than classic")
+
+  // Switching back restores the classic shape (the option does not replace it).
+  openTab("设置")
+  reveal(shape)
+  shape.buttons["经典"].tap()
+  openTab("字幕")
+  XCTAssertTrue(wait(size, timeout: 10) { $0.label == classicLabel }, "classic restored: \(size.label)")
   XCTAssertEqual(app.state, .runningForeground)
  }
 

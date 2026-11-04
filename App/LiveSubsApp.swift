@@ -61,7 +61,7 @@ struct LiveView: View {
       Text("系统声音只送往你自己的 Soniox 账户。").foregroundStyle(.secondary)
      }
      VideoSurface(pip: pip)
-      .aspectRatio(CGFloat(CaptionCanvas.aspect), contentMode: .fit)
+      .aspectRatio(CGFloat(CaptionCanvas.aspect(for: settings.settings)), contentMode: .fit)
       .frame(maxWidth: .infinity)
       .background(Color.black)
       .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -307,6 +307,11 @@ struct SettingsView: View {
      }.pickerStyle(.segmented).accessibilityIdentifier("settings.display")
      Text("当前：" + store.settings.display.title).font(.caption).foregroundStyle(.secondary)
       .accessibilityIdentifier("settings.display.value")
+     Picker("悬浮窗形状", selection: $store.settings.pipShape) {
+      ForEach(PiPShape.allCases) { Text($0.title).tag($0) }
+     }.pickerStyle(.segmented).accessibilityIdentifier("settings.pipShape")
+     Text(store.settings.pipShape == .strip ? "长条：宽而扁的字幕条，约两行双语" : "经典：高度随字号与行数变化（preview 4 形状）")
+      .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("settings.pipShape.value")
     }
 
     Section("字幕样式") {

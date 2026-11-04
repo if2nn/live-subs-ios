@@ -217,49 +217,83 @@ import Foundation
   let old = try JSONDecoder().decode(Caption.self, from: Data(#"{"original":"a","translated":"b","status":"s","updated":0,"seq":1,"session":""}"#.utf8))
   check(old.originalLive == nil, "older caption files still decode")
 
-  // 7) Caption strip geometry and render size (preview 5: sharp, wide and flat).
-  let c3 = CaptionCanvas.make(screenScale: 3)
-  check(c3.pixelWidth == 1440 && c3.pixelHeight == 480 && c3.scale == 3, "3x screen renders 1440x480 (480x160 pt)")
-  let c2 = CaptionCanvas.make(screenScale: 2)
-  check(c2.pixelWidth == 960 && c2.pixelHeight == 320 && c2.scale == 2, "2x screen renders 960x320")
-  check(CaptionCanvas.aspect == 3, "strip is 3:1, wider than tall")
-  check(CaptionCanvas.make(screenScale: .nan).pixelWidth == 1440, "unknown scale falls back to 3x")
-  check(c3.label == "1440x480 @3x", c3.label)
+  // 7) Caption window geometry and render size (preview 5: sharp; strip shape optional).
+  var strip = AppSettings(); strip.pipShape = .strip
+  let classic = AppSettings()
+  check(classic.pipShape == .classic, "classic (preview 4) shape stays the default")
+  let c3 = CaptionCanvas.make(screenScale: 3, settings: strip)
+  check(c3.pixelWidth == 1440 && c3.pixelHeight == 336 && c3.scale == 3, "strip at 3x renders 1440x336 (480x112 pt)")
+  let c2 = CaptionCanvas.make(screenScale: 2, settings: strip)
+  check(c2.pixelWidth == 960 && c2.pixelHeight == 224 && c2.scale == 2, "strip at 2x renders 960x224")
+  check(CaptionCanvas.aspect(for: strip) > 4 && CaptionCanvas.aspect(for: strip) > CaptionCanvas.aspect(for: classic), "strip is wider and flatter than classic")
+  check(CaptionCanvas.make(screenScale: .nan, settings: strip).pixelWidth == 1440, "unknown scale falls back to 3x")
+  check(c3.label == "1440x336 @3x", c3.label)
+  let k3 = CaptionCanvas.make(screenScale: 3, settings: classic)
+  check(k3.pixelWidth == 1440 && k3.scale == 3, "classic is also drawn at screen scale: \(k3.label)")
+  check(k3.pointHeight == CaptionCanvas.pointHeight(for: classic) && k3.pointHeight != CaptionCanvas.stripPointHeight, "classic keeps its own height")
+  check(k3.pixelWidth != 1280, "no longer the fixed 1280 px preview 4 frame")
+  // Classic height still follows font size, line count and display mode (preview 4 behaviour).
+  var bigger = classic; bigger.style.fontSize = 40
+  var fewer = classic; fewer.style.lines = 1
+  var single = classic; single.display = .translationOnly
+  check(CaptionCanvas.pointHeight(for: bigger) > CaptionCanvas.pointHeight(for: classic), "classic grows with font")
+  check(CaptionCanvas.pointHeight(for: fewer) < CaptionCanvas.pointHeight(for: classic), "classic shrinks with fewer lines")
+  check(CaptionCanvas.pointHeight(for: single) < CaptionCanvas.pointHeight(for: classic), "classic single lane is shorter")
+  var maxed = classic; maxed.style.fontSize = 48; maxed.style.lines = 4
+  check(CaptionCanvas.classicPointRange.contains(CaptionCanvas.pointHeight(for: maxed)), "classic height clamped")
+  var smallStrip = strip; smallStrip.style.fontSize = 18; smallStrip.style.lines = 1
+  check(CaptionCanvas.pointHeight(for: smallStrip) == 112, "strip height is fixed")
   // PiP render size: match the pixels the aspect-fit frame occupies, 1:1.
-  let wide = CaptionCanvas.make(screenScale: 3, renderSize: (width: 1080, height: 600))
-  check(wide.pixelWidth == 1080 && wide.pixelHeight == 360, "width-limited PiP window: \(wide.label)")
-  let tall = CaptionCanvas.make(screenScale: 3, renderSize: (width: 2000, height: 300))
-  check(tall.pixelWidth == 900 && tall.pixelHeight == 300, "height-limited PiP window: \(tall.label)")
-  let huge = CaptionCanvas.make(screenScale: 3, renderSize: (width: 9000, height: 9000))
-  check(huge.pixelWidth == CaptionCanvas.maxPixelWidth && huge.pixelHeight * 3 == huge.pixelWidth, "render size clamped")
-  let tiny = CaptionCanvas.make(screenScale: 3, renderSize: (width: 100, height: 40))
+  let wide = CaptionCanvas.make(screenScale: 3, settings: strip, renderSize: (width: 1080, height: 600))
+  check(wide.pixelWidth == 1080 && wide.pixelHeight == 252, "width-limited PiP window: \(wide.label)")
+  let tall = CaptionCanvas.make(screenScale: 3, settings: strip, renderSize: (width: 2000, height: 300))
+  check(tall.pixelWidth == 1284 && tall.pixelHeight <= 300, "height-limited PiP window: \(tall.label)")
+  let huge = CaptionCanvas.make(screenScale: 3, settings: strip, renderSize: (width: 9000, height: 9000))
+  check(huge.pixelWidth == CaptionCanvas.maxPixelWidth && huge.pixelHeight == 560, "render size clamped: \(huge.label)")
+  let tiny = CaptionCanvas.make(screenScale: 3, settings: strip, renderSize: (width: 100, height: 40))
   check(tiny.pixelWidth == CaptionCanvas.minPixelWidth, "render size floor")
   for w in [1, 333, 1081, 1279, 1441, 2399] {
-   let c = CaptionCanvas.make(screenScale: 3, renderSize: (width: w, height: 5000))
-   check(c.pixelWidth % 6 == 0 && c.pixelHeight % 2 == 0 && c.pixelHeight * 3 == c.pixelWidth, "even 3:1 buffer for \(w)")
+   let c = CaptionCanvas.make(screenScale: 3, settings: strip, renderSize: (width: w, height: 5000))
+   check(c.pixelWidth % 2 == 0 && c.pixelHeight % 2 == 0 && abs(Double(c.pixelWidth) / Double(c.pixelHeight) - c.aspect) < 0.05, "even strip buffer for \(w): \(c.label)")
+   let k = CaptionCanvas.make(screenScale: 3, settings: classic, renderSize: (width: w, height: 5000))
+   check(k.pixelWidth % 2 == 0 && k.pixelHeight % 2 == 0 && abs(Double(k.pixelWidth) / Double(k.pixelHeight) - k.aspect) < 0.05, "classic buffer for \(w): \(k.label)")
   }
-  check(c3.pixelWidth != 1280 && c3.pixelHeight != 404, "no longer the preview 4 1280x404 frame")
+  let kr = CaptionCanvas.make(screenScale: 3, settings: classic, renderSize: (width: 1000, height: 200))
+  check(Double(kr.pixelHeight) <= 200 && kr.pixelWidth <= 1000, "classic fits the PiP render size: \(kr.label)")
 
-  // Typography: default bilingual fits two lines per lane in the strip.
-  var ty = AppSettings()
-  let tDefault = CaptionTypography.make(ty, hasNotice: false, hasCaption: true)
+  // Typography: what fits each shape.
+  for shape in PiPShape.allCases {
+   for display in DisplayMode.allCases {
+    for font in [18.0, 30.0, 48.0] {
+     for lines in [1, 2, 4] {
+      for notice in [false, true] {
+       var st = AppSettings(); st.pipShape = shape; st.display = display; st.style.fontSize = font; st.style.lines = lines
+       let t = CaptionTypography.make(st, hasNotice: notice, hasCaption: true)
+       let budget = CaptionCanvas.pointHeight(for: st) - 2 * CaptionTypography.verticalPadding
+       check(t.lines >= 1 && t.lines <= lines && t.textHeight(display: display) + t.noticeHeight <= budget + 0.5,
+             "\(shape) \(display) font \(font) lines \(lines) notice \(notice) fits: \(t)")
+      }
+     }
+    }
+   }
+  }
+  let tDefault = CaptionTypography.make(strip, hasNotice: false, hasCaption: true)
   check(tDefault.mainPoints == 22.5 && abs(tDefault.secondaryPoints - 17.55) < 0.001, "default 22.5/17.55 pt")
-  check(tDefault.lines == 2, "default bilingual: two lines per lane, got \(tDefault.lines)")
-  let budget = CaptionCanvas.pointHeight - 2 * CaptionTypography.verticalPadding
-  check(tDefault.textHeight(display: .bilingual) <= budget, "bilingual text fits the strip")
-  let tNote = CaptionTypography.make(ty, hasNotice: true, hasCaption: true)
-  check(tNote.textHeight(display: .bilingual) + tNote.noticeHeight <= budget && tNote.lines >= 1, "fits with footnote")
-  ty.style.fontSize = 48; ty.style.lines = 4
-  let tBig = CaptionTypography.make(ty, hasNotice: true, hasCaption: true)
-  check(tBig.lines >= 1 && tBig.textHeight(display: .bilingual) + tBig.noticeHeight <= budget + 0.5, "largest font still fits: \(tBig)")
-  ty.display = .translationOnly
-  let tOnly = CaptionTypography.make(ty, hasNotice: false, hasCaption: true)
-  check(tOnly.lines >= 2 && tOnly.textHeight(display: .translationOnly) <= budget, "translation-only uses the height")
-  ty.style.lines = 1; ty.style.fontSize = 18; ty.display = .bilingual
-  check(CaptionTypography.make(ty, hasNotice: false, hasCaption: true).lines == 1, "user line limit respected")
+  check(tDefault.lines == 1 && tDefault.textHeight(display: .bilingual) <= 112 - 20, "strip default bilingual: one translation + one original line, got \(tDefault.lines)")
+  check(CaptionTypography.make(strip, hasNotice: true, hasCaption: true).lines == 1, "strip keeps both lanes with a footnote")
+  check(CaptionTypography.make(classic, hasNotice: true, hasCaption: true).lines == classic.style.lines, "classic shows the chosen lines")
+  var stripOnly = strip; stripOnly.display = .translationOnly; stripOnly.style.lines = 4
+  check(CaptionTypography.make(stripOnly, hasNotice: false, hasCaption: true).lines >= 3, "strip translation-only uses the height")
   let empty = CaptionTypography.make(AppSettings(), hasNotice: true, hasCaption: false)
   check(empty.noticeHeight == 0 && empty.noticePoints >= 14, "empty window: centred, legible message")
 
-  print("FeatureTests PASS (\(checks) checks: audio decode/resample, Soniox config, settings, history, captions, caption strip geometry)")
+  // Settings: the new shape persists; older saved settings decode without resetting.
+  var saved = AppSettings(); saved.pipShape = .strip; saved.style.fontSize = 36
+  check(AppSettings.decode(saved.encoded()) == saved.normalized(), "shape round-trips")
+  let preview4 = #"{"languages":{"source":"auto","target":"zh"},"display":"translationOnly","style":{"fontSize":36,"lines":3,"translationColor":"yellow","originalColor":"white","position":"bottom","translationFirst":true,"backgroundOpacity":1}}"#
+  let migrated = AppSettings.decode(Data(preview4.utf8))
+  check(migrated.pipShape == .classic && migrated.display == .translationOnly && migrated.style.fontSize == 36 && migrated.style.lines == 3, "preview 4 settings keep values, default to classic")
+
+  print("FeatureTests PASS (\(checks) checks: audio decode/resample, Soniox config, settings, history, captions, caption window geometry)")
  }
 }

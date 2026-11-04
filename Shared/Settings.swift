@@ -32,6 +32,17 @@ enum DisplayMode: String, Codable, Sendable, CaseIterable, Identifiable {
  }
 }
 
+/// Shape of the PiP caption window. `classic` is the preview 4 shape (height
+/// follows font and line count) and stays the default; `strip` is the optional
+/// wide, flat 3:1 subtitle bar added in preview 5.
+enum PiPShape: String, Codable, Sendable, CaseIterable, Identifiable {
+ case classic, strip
+ var id: String { rawValue }
+ var title: String {
+  switch self { case .classic: "经典"; case .strip: "长条" }
+ }
+}
+
 enum CaptionColor: String, Codable, Sendable, CaseIterable, Identifiable {
  case white, yellow, cyan, green, gray
  var id: String { rawValue }
@@ -97,6 +108,18 @@ struct AppSettings: Codable, Sendable, Equatable {
  var languages = LanguageSettings()
  var display: DisplayMode = .bilingual
  var style = SubtitleStyle()
+ var pipShape: PiPShape = .classic
+ init() {}
+ // Missing keys (settings saved by preview 4 and earlier) keep their defaults
+ // instead of resetting everything the user chose.
+ private enum CodingKeys: String, CodingKey { case languages, display, style, pipShape }
+ init(from decoder: Decoder) throws {
+  let c = try decoder.container(keyedBy: CodingKeys.self)
+  languages = (try? c.decodeIfPresent(LanguageSettings.self, forKey: .languages)) ?? LanguageSettings()
+  display = (try? c.decodeIfPresent(DisplayMode.self, forKey: .display)) ?? .bilingual
+  style = (try? c.decodeIfPresent(SubtitleStyle.self, forKey: .style)) ?? SubtitleStyle()
+  pipShape = (try? c.decodeIfPresent(PiPShape.self, forKey: .pipShape)) ?? .classic
+ }
  func normalized() -> AppSettings {
   var s = self
   s.languages = languages.normalized(); s.style = style.normalized()
