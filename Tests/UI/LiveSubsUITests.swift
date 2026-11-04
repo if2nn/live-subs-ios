@@ -36,8 +36,12 @@ final class LiveSubsUITests: XCTestCase {
   let scroller = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch : app.scrollViews.firstMatch
   for _ in 0..<14 {
    if element.exists && element.isHittable { return }
+   // Drag along the left margin: a centre swipe lands on a Slider and moves it
+   // instead of scrolling (seen on the iOS 27 simulator).
    let target: XCUIElement = scroller.exists ? scroller : (app! as XCUIElement)
-   up ? target.swipeUp(velocity: .slow) : target.swipeDown(velocity: .slow)
+   let low = target.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.78))
+   let high = target.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.32))
+   up ? low.press(forDuration: 0.05, thenDragTo: high) : high.press(forDuration: 0.05, thenDragTo: low)
   }
  }
  private func wait(_ element: XCUIElement, timeout: TimeInterval = 10, _ predicate: @escaping (XCUIElement) -> Bool) -> Bool {
