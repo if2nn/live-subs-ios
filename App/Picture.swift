@@ -57,6 +57,8 @@ final class Picture:NSObject,ObservableObject,AVPictureInPictureSampleBufferPlay
   render(Store.read() ?? Caption())
   Diagnostics.record("pip.layer.status",code:layer.status.rawValue)
   Diagnostics.record("pip.layer.ready",code:layer.isReadyForMoreMediaData ? 1:0)
+  // First frame ready for display is not proof of actual presentation.
+  Diagnostics.record("pip.layer.readyForDisplay",code:layer.isReadyForDisplay ? 1:0)
   if let error=layer.error{Diagnostics.record("pip.layer.error",code:(error as NSError).code)}
   guard hasFrame,layer.status != .failed else{
    status="字幕画面尚未就绪，请稍后再点";Diagnostics.record("pip.frame.unavailable");return

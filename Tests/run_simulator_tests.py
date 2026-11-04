@@ -37,7 +37,7 @@ def collect():
             (OUT / name).write_text(result.stdout)
         except Exception as error:
             (OUT / name).write_text(str(error))
-    best(["xcrun", "simctl", "io", udid, "screenshot", OUT / "final-screen.png"], "screenshot.log")
+    best(["xcrun", "simctl", "io", udid, "screenshot", "--display=1", OUT / "final-screen.png"], "screenshot.log")
     best(["xcrun", "simctl", "spawn", udid, "log", "show", "--style", "compact",
           "--start", state["started"], "--predicate",
           'process == "LiveSubs" OR process == "Broadcast"'], "app-unified.log")

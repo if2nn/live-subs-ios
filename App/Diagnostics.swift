@@ -38,7 +38,7 @@ private final class EventStorage:@unchecked Sendable {
  private let simple:Set<String>=[
   "app.launch","pip.start.requested","pip.unsupported","pip.surface.unavailable",
   "pip.frame.unavailable","pip.controller.unavailable","pip.not.ready",
-  "pip.layer.status","pip.layer.ready","pip.layer.error","pip.window.attached",
+  "pip.layer.status","pip.layer.ready","pip.layer.readyForDisplay","pip.layer.error","pip.window.attached",
   "pip.frame.ptsMillis","pip.frame.width","pip.frame.height","pip.frame.subtype",
   "pip.frame.enqueued.not.proven.presented",
   "pip.renderer.failed","exception.NSInvalidArgumentException",
