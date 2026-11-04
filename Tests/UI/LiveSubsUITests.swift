@@ -27,11 +27,16 @@ final class LiveSubsUITests: XCTestCase {
   defer { capture("final-state") }
   XCTAssertTrue(app.buttons["pip.start"].waitForExistence(timeout: 10))
   capture("launch")
+  let captureStatus=app.staticTexts["capture.status"]
+  XCTAssertTrue(captureStatus.waitForExistence(timeout: 10))
+  XCTAssertTrue(captureStatus.label.contains("未收到扩展心跳"), "A fresh simulator must not invent an active broadcast")
+  XCTAssertFalse(captureStatus.label.contains("已连接"), "No broadcast extension has been started")
+
   app.buttons["pip.start"].tap()
   let pip = app.staticTexts["pip.status"]
   let settled = NSPredicate { _, _ in
    guard pip.exists else { return false }
-   return !["", "先开启画中画，再开始广播", "正在开启画中画"].contains(pip.label)
+   return !pip.label.isEmpty && !["先开启画中画，再开始广播", "正在开启画中画"].contains(pip.label) && !pip.label.hasPrefix("正在准备")
   }
   XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: settled, object: nil)], timeout: 15), .completed)
   XCTAssertEqual(app.state, .runningForeground, "PiP request must not terminate or background the app")
@@ -39,7 +44,7 @@ final class LiveSubsUITests: XCTestCase {
   if pip.label == "此设备不支持画中画" { outcome = "unsupported" }
   else if pip.label == "画中画已开启" { outcome = "actualdidstart" }
   else {
-   XCTAssertTrue(["请在 App 前台、字幕预览可见时开启", "字幕预览尚未布局，请稍后再点", "音频会话启动失败", "字幕画面尚未就绪，请稍后再点", "无法创建画中画", "画中画尚未就绪，请稍后再点", "画中画启动失败，请导出诊断日志"].contains(pip.label), "Unclassified PiP outcome")
+   XCTAssertTrue(["请在 App 前台、字幕预览可见时开启", "字幕预览尚未布局，请稍后再点", "音频会话启动失败", "字幕画面尚未就绪，请稍后再点", "无法创建画中画", "画中画尚未就绪，请稍后再点", "画中画启动失败，请导出诊断日志", "系统暂不可开启画中画，请再点一次", "字幕首帧准备超时，请再点一次", "画中画未确认开启，请再点一次", "系统尚未确认画中画开启，请稍后检查"].contains(pip.label), "Unclassified PiP outcome")
    outcome = "controlledfail"
   }
   let note = XCTAttachment(string: "PiP outcome=\(outcome); status=\(pip.label). Simulator does not validate device PiP/ReplayKit.")

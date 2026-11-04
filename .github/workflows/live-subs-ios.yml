@@ -59,9 +59,16 @@ jobs:
           xcodegen generate
       - name: Core assertions
         run: |
+          swiftc --version
           python3 Tests/static_checks.py
+          python3 Tests/pip_policy_checks.py
+          python3 Tests/capture_ipc_checks.py
           swiftc -parse-as-library -swift-version 6 -strict-concurrency=complete Shared/Transcript.swift Shared/Profile.swift Tests/CoreTests.swift -o /tmp/core-tests
           /tmp/core-tests
+          swiftc -swift-version 6 Shared/PiPPolicy.swift Tests/PiPPolicyTests.swift -o /tmp/pip-policy-tests
+          /tmp/pip-policy-tests
+          swiftc -swift-version 6 Shared/CaptureState.swift Tests/CaptureStateTests.swift -o /tmp/capture-state-tests
+          /tmp/capture-state-tests
       - name: Build unsigned device app
         run: |
           set -o pipefail

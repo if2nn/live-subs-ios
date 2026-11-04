@@ -30,7 +30,7 @@ for folder, filename in [("App", "LiveSubs.entitlements"), ("Broadcast", "Broadc
     check("group.com.aian.livesubs" in ent["com.apple.security.application-groups"], "declared app group")
     check("keychain-access-groups" not in ent, "no unresolved AppIdentifierPrefix")
     check(b"$(" not in plistlib.dumps(ent), "concrete entitlement metadata")
-    check(info["CFBundleVersion"] == "2", "preview 2 build version")
+    check(info["CFBundleVersion"] == "3", "preview 3 build version")
 check('-> [Segment]' in transcript and 'var source = Lane()' in transcript and 'var target = Lane()' in transcript, "independent segment lanes")
 check('approximate: lane == .translation' in transcript, "translation approximate")
 check('self.ws?.send(.string(""))' in socket, "empty TEXT terminator")

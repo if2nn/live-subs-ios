@@ -18,6 +18,19 @@ public enum Diagnostics {
  }
  public static func record(_ event:String){storage.record(event,code:nil)}
  public static func record(_ event:String,code:Int){storage.record(event,code:code)}
+ public static func recordRendererError(_ error:Error){
+  let e=error as NSError
+  // Never persist raw descriptions, userInfo or nested server echoes.
+  let domain:String
+  switch e.domain {
+  case "AVFoundationErrorDomain": domain="AVFoundationErrorDomain"
+  case "CoreMediaErrorDomain": domain="CoreMediaErrorDomain"
+  case "NSOSStatusErrorDomain": domain="NSOSStatusErrorDomain"
+  case "NSCocoaErrorDomain": domain="NSCocoaErrorDomain"
+  default: domain="other"
+  }
+  storage.recordSafeError(domain:domain,code:e.code)
+ }
  public static var previousSessionSummary:String{storage.summary}
  public static var exportURL:URL?{storage.export()}
 }
@@ -36,6 +49,8 @@ private final class EventStorage:@unchecked Sendable {
   "pip.delegate.didStop","pip.delegate.failedStart"
  ]
  private let simple:Set<String>=[
+  "pip.possible","pip.start.returned","pip.stop.returned","pip.start.retry",
+  "pip.start.timeout.readiness","pip.start.timeout.delegate","pip.start.timeout.didStart","pip.start.didStart.late","pip.renderer.flush","pip.renderer.rebuild",
   "app.launch","pip.start.requested","pip.unsupported","pip.surface.unavailable",
   "pip.frame.unavailable","pip.controller.unavailable","pip.not.ready",
   "pip.layer.status","pip.layer.ready","pip.layer.readyForDisplay","pip.layer.error","pip.window.attached",
@@ -49,6 +64,25 @@ private final class EventStorage:@unchecked Sendable {
   guard let dot=event.lastIndex(of:".") else{return false}
   return operations.contains(String(event[..<dot])) &&
    ["before","success","failure"].contains(String(event[event.index(after:dot)...]))
+ }
+ func recordSafeError(domain:String,code:Int){
+  lock.lock();defer{lock.unlock()}
+  if !installed{_ = beginSession()}
+  guard installed,let dir=directory() else{return}
+  let description:String
+  switch (domain,code) {
+  case ("AVFoundationErrorDomain",-11800): description="AVFoundation unknown failure"
+  case ("AVFoundationErrorDomain",-11819): description="Media services reset"
+  case ("AVFoundationErrorDomain",-11847): description="Operation interrupted"
+  default: description="Renderer failure; original description redacted"
+  }
+  let line="\(Date().timeIntervalSince1970) pip.renderer.error domain=\(domain) code=\(code) description=\(description)\n"
+  let url=dir.appendingPathComponent("diagnostics.log")
+  do{
+   var data=try bounded(url)
+   if data.count>retained{data=Data(data.suffix(retained))}
+   data.append(Data(line.utf8));try durableWrite(data,to:url)
+  }catch{}
  }
  private func directory()->URL?{
   let fm=FileManager.default
@@ -124,6 +158,10 @@ private final class EventStorage:@unchecked Sendable {
    data.append(try bounded(dir.appendingPathComponent("previous-session.log")))
    data.append(Data("\nCURRENT SESSION\n".utf8))
    data.append(try bounded(dir.appendingPathComponent("diagnostics.log")))
+   data.append(Data("\nEXTENSION RUNTIME DIAGNOSTICS\n".utf8))
+   data.append(Data(CaptureIPC.diagnosticText.utf8))
+   data.append(Data("\nEXTENSION BOUNDED EVENTS\n".utf8))
+   data.append(Data(CaptureIPC.exportLogText.utf8))
    let url=dir.appendingPathComponent("diagnostics-export.log")
    try durableWrite(data,to:url)
    return url

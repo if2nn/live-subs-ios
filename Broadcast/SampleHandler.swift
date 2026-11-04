@@ -4,10 +4,10 @@ import AVFoundation
 // ReplayKit serializes audio callbacks; transcript/archive state is confined to client.queue.
 // Only immutable PCM Data crosses into the socket queue.
 final class SampleHandler:RPBroadcastSampleHandler, @unchecked Sendable{
- private let client=Soniox()
+ private lazy var client=Soniox()
  private var converter:AVAudioConverter?
  private var inputFormat:AVAudioFormat?
- private let outputFormat=AVAudioFormat(commonFormat:.pcmFormatInt16,sampleRate:16000,channels:1,interleaved:true)!
+ private lazy var outputFormat=AVAudioFormat(commonFormat:.pcmFormatInt16,sampleRate:16000,channels:1,interleaved:true)!
  private var transcript=Transcript()
  private var state=Caption()
  private var archive:URL?
@@ -21,16 +21,22 @@ final class SampleHandler:RPBroadcastSampleHandler, @unchecked Sendable{
  private var conversionFailures=0
  private var terminalStatus:String?
  override func broadcastStarted(withSetupInfo setupInfo:[String:NSObject]?){
+  CaptureIPC.extensionEntered()
+  CaptureIPC.extensionDiscovered()
+  CaptureIPC.event(.started)
   began=Date()
-  guard let root=Store.root else{finishBroadcastWithError(NSError(domain:"App Group 不可用",code:1));return}
-  let key=Store.key()
-  guard !key.isEmpty else{finishBroadcastWithError(NSError(domain:"请先保存 API Key，检查共享钥匙串签名",code:2));return}
+  guard let root=Store.root else{CaptureIPC.event(.fatal,code:1,domain:"LiveSubs");finishBroadcastWithError(NSError(domain:"App Group 不可用",code:1));return}
+  let keyResult=Store.keyReadResult()
+  CaptureIPC.keyRead(success:keyResult.success,status:keyResult.status)
+  let key=keyResult.value
+  guard keyResult.success else{CaptureIPC.event(.fatal,code:2,domain:"LiveSubs");finishBroadcastWithError(NSError(domain:"请先保存 API Key，检查共享钥匙串签名",code:2));return}
   let dir=root.appendingPathComponent("Sessions")
   try? FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
   let f=DateFormatter();f.timeZone=TimeZone(identifier:"Asia/Shanghai");f.dateFormat="yyyy-MM-dd_HH-mm-ss"
   archive=dir.appendingPathComponent(f.string(from:began)+"_"+UUID().uuidString.prefix(6)+".srt")
   FileManager.default.createFile(atPath:archive!.path,contents:nil,attributes:[.protectionKey:FileProtectionType.completeUntilFirstUserAuthentication])
   recoveryURL=archive?.deletingPathExtension().appendingPathExtension("recovery.json")
+  client.onEvent={event,code,domain in CaptureIPC.event(event,code:code,domain:domain)}
   client.onMessage={[weak self] obj in
    guard let self=self,self.terminalStatus == nil else{return}
    let tokens=obj["tokens"] as? [[String:Any]]
@@ -66,6 +72,7 @@ final class SampleHandler:RPBroadcastSampleHandler, @unchecked Sendable{
  // the framework off the queue so broadcastFinished can safely synchronize it.
  private func fail(_ message:String){
   guard terminalStatus == nil else{return}
+  CaptureIPC.event(.fatal,code:3,domain:"LiveSubs")
   terminalStatus=message
   add(transcript.finishFinals())
   state.status=message;persist();writeSegments()
@@ -76,6 +83,7 @@ final class SampleHandler:RPBroadcastSampleHandler, @unchecked Sendable{
   }
  }
  private func conversionFailed(){
+  CaptureIPC.event(.conversionError)
   client.queue.async{[self] in
    guard terminalStatus == nil else{return}
    conversionFailures+=1
@@ -114,6 +122,7 @@ final class SampleHandler:RPBroadcastSampleHandler, @unchecked Sendable{
  }
  override func processSampleBuffer(_ sampleBuffer:CMSampleBuffer,with sampleBufferType:RPSampleBufferType){
   guard sampleBufferType == .audioApp else{return}
+  CaptureIPC.audio(frames:CMSampleBufferGetNumSamples(sampleBuffer))
   autoreleasepool{convert(sampleBuffer)}
  }
  private func convert(_ sample:CMSampleBuffer){
@@ -142,9 +151,10 @@ final class SampleHandler:RPBroadcastSampleHandler, @unchecked Sendable{
   for i in 0..<n{peak=max(peak,abs(Int32(p[i])))}
   client.send(Data(bytes:p,count:n*2),voiced:peak>300)
  }
- override func broadcastPaused(){client.queue.async{self.state.status="广播已暂停";self.publish(true)}}
- override func broadcastResumed(){client.queue.async{self.state.status="广播已继续";self.publish(true)}}
+ override func broadcastPaused(){CaptureIPC.event(.paused);client.queue.async{self.state.status="广播已暂停";self.publish(true)}}
+ override func broadcastResumed(){CaptureIPC.event(.resumed);client.queue.async{self.state.status="广播已继续";self.publish(true)}}
  override func broadcastFinished(){
+  CaptureIPC.event(.stopped)
   // ReplayKit may kill the extension as soon as this callback returns. Persist
   // FIRST, then give finalization a small, bounded opportunity, not a guarantee.
   client.queue.sync{state.status=terminalStatus ?? "结束中，尾句待确认";persist();publish(true)}

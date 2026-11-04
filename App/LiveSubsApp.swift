@@ -15,7 +15,8 @@ import Observation
  var showShare=false
  private var tester:Soniox?
  var diagOpen=false
- var diagnostic:String{SharedSigning.diagnosticText}
+ var diagnostic:String{SharedSigning.diagnosticText+"\n\n"+CaptureIPC.diagnosticText}
+ var captureStatus:String{CaptureIPC.statusText}
  var previousDiagnostic:String{Diagnostics.previousSessionSummary}
  func exportDiagnostics(){
   guard let events=Diagnostics.exportURL,
@@ -50,13 +51,13 @@ import Observation
    }
   }
   c.onMessage={[weak self] obj in
-   let err=(obj["error_message"] as? String) ?? (obj["error"] as? String)
+   let hasErr=obj["error_message"] != nil || obj["error"] != nil
    let code=(obj["error_code"] as? Int).map(String.init)
    let hasValidResponse = obj["tokens"] is [[String:Any]] || obj["finished"] as? Bool == true
    Task{@MainActor in
     guard let self,self.testing else{return}
-    if err != nil || code != nil{
-     self.message="Soniox 返回错误 "+(err ?? "code \(code!)");self.testing=false;self.tester?.stop();self.tester=nil;return
+    if hasErr || code != nil{
+     self.message="Soniox 返回错误，错误码 "+(code ?? "未知");self.testing=false;self.tester?.stop();self.tester=nil;return
     }
     guard hasValidResponse else{return}
     self.message="已收到 Soniox 响应，连接可用";self.testing=false;self.tester?.stop();self.tester=nil
@@ -107,6 +108,9 @@ struct Home:View{
       HStack{
        Button("开启画中画"){picture.start()}.glassProminentButton().accessibilityIdentifier("pip.start")
        Button("关闭"){picture.stop()}.glassButton()
+      }
+      TimelineView(.periodic(from:.now,by:3)){_ in
+       Text(m.captureStatus).accessibilityIdentifier("capture.status").font(.callout.weight(.medium)).frame(maxWidth:.infinity,alignment:.leading)
       }
       Text(picture.status).accessibilityIdentifier("pip.status").font(.caption).foregroundStyle(.secondary)
       Text(m.previousDiagnostic).font(.caption2).textSelection(.enabled)

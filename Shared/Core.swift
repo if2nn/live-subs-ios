@@ -26,6 +26,31 @@ enum Store {
   }
   return status
  }
+ // Credential is returned only to the caller, never serialized in IPC.
+ struct KeyReadResult {
+  let value: String
+  let status: OSStatus
+  var success: Bool { status == errSecSuccess && !value.isEmpty }
+ }
+ static func keyReadResult() -> KeyReadResult {
+  var candidates: [[String:Any]] = []
+  if !SharedSigning.isExtension {
+   candidates.append(query(group:SharedSigning.discovery.privateGroup ?? SharedSigning.discovery.defaultGroup,local:true))
+  }
+  candidates += SharedSigning.keychainGroups.map { query(group:$0) }
+  var last: OSStatus = SharedSigning.discovery.probes.first?.status ?? errSecItemNotFound
+  for var q in candidates {
+   q[kSecReturnData as String]=true; q[kSecMatchLimit as String]=kSecMatchLimitOne
+   var result: CFTypeRef?
+   let status=SecItemCopyMatching(q as CFDictionary,&result)
+   last=status
+   if status == errSecSuccess, let data=result as? Data {
+    let value=String(decoding:data,as:UTF8.self)
+    if !value.isEmpty { return KeyReadResult(value:value,status:status) }
+   }
+  }
+  return KeyReadResult(value:"",status:last)
+ }
  static func key() -> String {
   // The app's newest saved key wins even if a shared write previously failed.
   if !SharedSigning.isExtension {
