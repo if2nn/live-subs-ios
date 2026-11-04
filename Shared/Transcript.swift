@@ -1,7 +1,10 @@
 import Foundation
 
-struct Caption: Codable, Sendable {
+struct Caption: Codable, Sendable, Equatable {
  var original = ""; var translated = ""; var status = "等待广播"; var updated = Date()
+ /// Monotonic per extension session; lets the app skip unchanged frames.
+ var seq = 0
+ var session = ""
 }
 struct Segment: Codable, Sendable {
  enum Lane: String, Codable, Sendable { case original, translation }
@@ -56,17 +59,31 @@ struct Transcript: Codable, Sendable {
   var remaining = Lane()
   remaining.partial = current.partial
   if !current.partial.isEmpty { remaining.start = current.end; remaining.end = current.end }
-  if lane == .original { recentSource = current.final; source = remaining }
-  else { recentTarget = current.final; target = remaining }
+  if lane == .original { recentSource = Transcript.rolling(recentSource, current.final); source = remaining }
+  else { recentTarget = Transcript.rolling(recentTarget, current.final); target = remaining }
   return cue
  }
  mutating func finishFinals() -> [Segment] {
   [close(.original), close(.translation)].compactMap { $0 }
  }
+ /// Keeps the last finalized text so multi-line captions have context.
+ static func rolling(_ history: String, _ next: String, limit: Int = 320) -> String {
+  let joined = history.isEmpty ? next : history + HistoryEntryJoin.separator(history, next) + next
+  return String(joined.suffix(limit))
+ }
  var caption: Caption {
-  Caption(original: String((source.visible.isEmpty ? recentSource : source.visible).suffix(400)),
-          translated: String((target.visible.isEmpty ? recentTarget : target.visible).suffix(400)),
-          status: "正在识别")
+  let o = source.visible.isEmpty ? recentSource : Transcript.rolling(recentSource, source.visible, limit: 400)
+  let t = target.visible.isEmpty ? recentTarget : Transcript.rolling(recentTarget, target.visible, limit: 400)
+  return Caption(original: String(o.suffix(400)), translated: String(t.suffix(400)), status: "正在识别")
+ }
+}
+/// Space only between two Latin-script words; CJK text joins directly.
+enum HistoryEntryJoin {
+ static func separator(_ a: String, _ b: String) -> String {
+  guard let x = a.unicodeScalars.last, let y = b.unicodeScalars.first else { return "" }
+  if y == " " || x == " " { return "" }
+  let latin = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.!?;:'\"")
+  return latin.contains(x) && latin.contains(y) ? " " : ""
  }
 }
 struct Recovery: Codable, Sendable {

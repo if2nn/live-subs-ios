@@ -41,29 +41,12 @@ private final class EventStorage:@unchecked Sendable {
  private var previous="暂无上次会话记录"
  private let maximum=128*1024
  private let retained=64*1024
- private let operations:Set<String>=[
-  "pip.attach","pip.audio.category","pip.audio.active","pip.controller",
-  "pip.frame.first","pip.start","pip.stop","pip.delegate.playing",
-  "pip.delegate.range","pip.delegate.paused","pip.delegate.size",
-  "pip.delegate.skip","pip.delegate.willStart","pip.delegate.didStart",
-  "pip.delegate.didStop","pip.delegate.failedStart"
- ]
- private let simple:Set<String>=[
-  "pip.possible","pip.start.returned","pip.stop.returned","pip.start.retry",
-  "pip.start.timeout.readiness","pip.start.timeout.delegate","pip.start.timeout.didStart","pip.start.didStart.late","pip.renderer.flush","pip.renderer.rebuild",
-  "app.launch","pip.start.requested","pip.unsupported","pip.surface.unavailable",
-  "pip.frame.unavailable","pip.controller.unavailable","pip.not.ready",
-  "pip.layer.status","pip.layer.ready","pip.layer.readyForDisplay","pip.layer.error","pip.window.attached",
-  "pip.frame.ptsMillis","pip.frame.width","pip.frame.height","pip.frame.subtype",
-  "pip.frame.enqueued.not.proven.presented",
-  "pip.renderer.failed","exception.NSInvalidArgumentException",
-  "exception.NSInternalInconsistencyException","exception.NSRangeException","exception.other"
- ]
+ // Events are compile-time constants from this app: a fixed namespace and
+ // letters/dots only, so no key, caption text or path can ever be recorded.
+ private let namespaces=["pip.","app.","broadcast.","keepalive.","exception.","history.","settings."]
  private func allowed(_ event:String)->Bool{
-  if simple.contains(event){return true}
-  guard let dot=event.lastIndex(of:".") else{return false}
-  return operations.contains(String(event[..<dot])) &&
-   ["before","success","failure"].contains(String(event[event.index(after:dot)...]))
+  guard event.utf8.count<=64,namespaces.contains(where:{event.hasPrefix($0)}) else{return false}
+  return event.unicodeScalars.allSatisfy{CharacterSet(charactersIn:"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.").contains($0)}
  }
  func recordSafeError(domain:String,code:Int){
   lock.lock();defer{lock.unlock()}

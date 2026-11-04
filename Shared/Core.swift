@@ -91,6 +91,27 @@ enum Store {
   guard let root = root, let data = try? JSONEncoder().encode(c) else { return }
   try? data.write(to: root.appendingPathComponent("caption.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
  }
+ /// Settings mirrored into the shared container so the extension can read the
+ /// languages chosen in the app. Contains no credential.
+ static func saveSharedSettings(_ settings: AppSettings) {
+  guard let root = root else { return }
+  let url = root.appendingPathComponent("Config/settings.json")
+  try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+  try? settings.encoded().write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+ }
+ static func sharedSettings() -> AppSettings {
+  guard let root = root else { return AppSettings() }
+  return AppSettings.decode(try? Data(contentsOf: root.appendingPathComponent("Config/settings.json")))
+ }
+ static var sessionsDirectory: URL? { root?.appendingPathComponent("Sessions", isDirectory: true) }
+ static func writeHistory(_ entry: HistoryEntry) -> Bool {
+  guard let dir = sessionsDirectory, HistoryEntry.safeID(entry.id), let data = entry.encoded() else { return false }
+  do {
+   try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+   try data.write(to: dir.appendingPathComponent(entry.id + ".json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+   return true
+  } catch { return false }
+ }
  static func read() -> Caption? {
   guard let root = root, let data = try? Data(contentsOf: root.appendingPathComponent("caption.json")) else { return nil }
   return try? JSONDecoder().decode(Caption.self, from: data)

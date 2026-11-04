@@ -18,6 +18,13 @@ enum CaptureIPC {
  static func keyRead(success: Bool, status: Int32) { recorder.keyRead(success, status) }
  static func audio(frames: Int) { recorder.audio(frames) }
  static func tokens(source: Int, translation: Int) { recorder.tokens(source, translation) }
+ static func audioFormat(_ summary: String, supported: Bool) { recorder.audioFormat(summary, supported) }
+ static func audioSent(bytes: Int) { recorder.audioSent(bytes) }
+ static func audioDropped(bytes: Int) { recorder.audioDropped(bytes) }
+ static func audioLevel(peakDB: Double) { recorder.audioLevel(peakDB) }
+ static func conversionError() { recorder.conversionError() }
+ static func serverAudio(final: Int?, total: Int?) { recorder.serverAudio(final, total) }
+ static func session(source: String, target: String, historyID: String) { recorder.session(source, target, historyID) }
 
  private static func safeIdentifier(_ value: String) -> Bool {
   !value.isEmpty && value.utf8.count <= 256 &&
@@ -34,7 +41,7 @@ enum CaptureIPC {
         let data = try? Data(contentsOf: url, options: .mappedIfSafe),
         data.count <= maximumBytes,
         let value = try? JSONDecoder().decode(CaptureSnapshot.self, from: data),
-        value.schema == 1, value.relativePath == relativePath,
+        value.schema == 2, value.relativePath == relativePath,
         UUID(uuidString:value.session) != nil, safeIdentifier(value.bundleID),
         value.group.map { safeIdentifier($0) } ?? true,
         value.errorDomain.map { ["NSURLErrorDomain","NSPOSIXErrorDomain","Soniox","LiveSubs","OSStatus","Other"].contains($0) } ?? true,
@@ -173,8 +180,51 @@ private final class CaptureRecorder: @unchecked Sendable {
   lock.lock(); defer { lock.unlock() }
   guard active else { return }
   snapshot.sourceTokens &+= UInt64(max(0,source)); snapshot.translationTokens &+= UInt64(max(0,translation))
+  if snapshot.sourceTokens > 0 && snapshot.lastSource == nil { append(.firstToken); flush(critical:true) }
   if source > 0 { snapshot.lastSource=Date() }
   if translation > 0 { snapshot.lastTranslation=Date() }
+ }
+ func audioFormat(_ summary: String, _ supported: Bool) {
+  lock.lock(); defer { lock.unlock() }
+  guard active, snapshot.audioFormat != summary else { return }
+  snapshot.audioFormat = String(summary.prefix(80))
+  append(supported ? .audioFormat : .audioUnsupported); flush(critical:true)
+ }
+ func audioSent(_ bytes: Int) {
+  lock.lock(); defer { lock.unlock() }
+  guard active else { return }
+  let first = snapshot.audioSentBytes == 0
+  snapshot.audioSentBytes &+= UInt64(max(0, bytes)); snapshot.audioSentChunks &+= 1
+  if first { append(.firstAudioSent); flush(critical:true) }
+ }
+ func audioDropped(_ bytes: Int) {
+  lock.lock(); defer { lock.unlock() }
+  guard active else { return }
+  snapshot.audioDroppedBytes &+= UInt64(max(0, bytes))
+ }
+ func audioLevel(_ db: Double) {
+  lock.lock(); defer { lock.unlock() }
+  guard active, db.isFinite else { return }
+  snapshot.audioPeakDB = db
+  snapshot.audioMaxPeakDB = max(snapshot.audioMaxPeakDB, db)
+ }
+ func conversionError() {
+  lock.lock(); defer { lock.unlock() }
+  guard active else { return }
+  snapshot.conversionErrors &+= 1
+  if snapshot.conversionErrors == 1 { append(.conversionError); flush(critical:true) }
+ }
+ func serverAudio(_ final: Int?, _ total: Int?) {
+  lock.lock(); defer { lock.unlock() }
+  guard active else { return }
+  if let final { snapshot.serverFinalAudioMS = max(snapshot.serverFinalAudioMS, final) }
+  if let total { snapshot.serverTotalAudioMS = max(snapshot.serverTotalAudioMS, total) }
+ }
+ func session(_ source: String, _ target: String, _ historyID: String) {
+  lock.lock(); defer { lock.unlock() }
+  guard active else { return }
+  snapshot.sourceLanguage = String(source.prefix(8)); snapshot.targetLanguage = String(target.prefix(8))
+  snapshot.historyID = String(historyID.prefix(64))
  }
  private func flush(critical: Bool) {
   guard let root = root else { return }

@@ -4,9 +4,10 @@ enum CaptureEvent: String, Codable, Sendable {
  case entered, discovered, started, paused, resumed, stopped, keyRead
  case connecting, transportOpen, configSent, protocolConfirmed
  case transportError, protocolError, retrying, conversionError, fatal, serverFinished
+ case audioFormat, audioUnsupported, firstAudioSent, firstToken
 }
 struct CaptureSnapshot: Codable, Sendable {
- var schema = 1
+ var schema = 2
  var session = UUID().uuidString
  var bundleID = ""
  var group: String?
@@ -31,6 +32,19 @@ struct CaptureSnapshot: Codable, Sendable {
  var memorySamples: UInt64 = 0
  var errorDomain: String?
  var errorCode: Int?
+ // Schema 2: audio path evidence. Counts and levels only, never audio.
+ var audioFormat: String?
+ var audioSentBytes: UInt64 = 0
+ var audioSentChunks: UInt64 = 0
+ var audioDroppedBytes: UInt64 = 0
+ var audioPeakDB: Double = -120
+ var audioMaxPeakDB: Double = -120
+ var conversionErrors: UInt64 = 0
+ var serverFinalAudioMS: Int = 0
+ var serverTotalAudioMS: Int = 0
+ var sourceLanguage: String?
+ var targetLanguage: String?
+ var historyID: String?
 }
 struct CaptureLogEntry: Codable, Sendable {
  let time: Date
@@ -53,8 +67,14 @@ enum CaptureState {
   if s.transport == "connecting" || s.transport == "idle" { return "扩展已启动，连接中" }
   if let last = s.lastAudio, now.timeIntervalSince(last) > 8 { return "近期未收到 App 音频" }
   if s.audioAppFrames == 0 { return "已连接，等待 App 音频；认证状态 " + (s.authentication == "confirmed" ? "已确认" : "待确认") }
+  if s.conversionErrors > 0 && s.audioSentBytes == 0 { return "音频格式无法转换：" + (s.audioFormat ?? "未知格式") }
+  if s.audioSentBytes == 0 { return "已收到 App 音频，尚未送出" }
   if s.authentication != "confirmed" { return "已收到音频，等待 Soniox 有效响应确认认证" }
-  if s.sourceTokens == 0 && s.translationTokens == 0 { return "有音频，等待识别" }
+  if s.sourceTokens == 0 && s.translationTokens == 0 {
+   if s.audioMaxPeakDB < -60 { return "系统声音为静音（受保护内容或未在播放）" }
+   if s.serverTotalAudioMS == 0 { return "音频已送出，Soniox 尚未确认处理" }
+   return "有声音，等待识别"
+  }
   return "正在识别与翻译"
  }
  // Operates on raw Store caption strings. Never persists or logs presentation text.

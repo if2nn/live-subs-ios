@@ -1,188 +1,389 @@
 import SwiftUI
 import ReplayKit
 import Observation
+import UIKit
 
-@main struct LiveSubsApp:App{
- init(){Diagnostics.install()}
- var body:some Scene{WindowGroup{Home()}}
-}
-@MainActor @Observable final class HomeModel{
- var key=Store.key()
- var message=""
- var testing=false
- var documents:[URL]=[]
- var share:[URL]=[]
- var showShare=false
- private var tester:Soniox?
- var diagOpen=false
- var diagnostic:String{SharedSigning.diagnosticText+"\n\n"+CaptureIPC.diagnosticText}
- var captureStatus:String{CaptureIPC.statusText}
- var previousDiagnostic:String{Diagnostics.previousSessionSummary}
- func exportDiagnostics(){
-  guard let events=Diagnostics.exportURL,
-        let text=try? String(contentsOf:events,encoding:.utf8) else{
-   message="诊断日志暂时无法读取";return
+@main struct LiveSubsApp: App {
+ @State private var settings = SettingsStore()
+ @State private var history = HistoryStore()
+ @State private var pip = CaptionPiP()
+ init() { Diagnostics.install() }
+ var body: some Scene {
+  WindowGroup {
+   RootView()
+    .environment(settings)
+    .environment(history)
+    .environment(pip)
+    .preferredColorScheme(.dark)
   }
-  let output=events.deletingLastPathComponent().appendingPathComponent("LiveSubs-diagnostics.txt")
-  do{
-   try (previousDiagnostic+"\n\n"+diagnostic+"\n\n"+text).write(to:output,atomically:true,encoding:.utf8)
-   share=[output];showShare=true
-  }catch{message="诊断导出失败"}
- }
- private var trimmed:String{key.trimmingCharacters(in:.whitespacesAndNewlines)}
- func saveKey(){
-  do{try Store.save(trimmed);message=saveMessage()}catch{message="保存失败 "+error.localizedDescription}
- }
- private func saveMessage()->String{
-  let scope=Store.saveScopeDescription
-  let shared=scope.hasPrefix("共享钥匙串")
-  return "已保存（"+scope+"）"+(shared ? "" : "。仅确认主 App 可保存和测试连接，不代表广播扩展可读或可广播。")
- }
- func test(){
-  let k=trimmed
-  do{try Store.save(k)}catch{message="保存失败 "+error.localizedDescription;return}
-  testing=true;message=saveMessage()+"。连接并发送一秒静音验证鉴权"
-  let c=Soniox();tester=c
-  c.onStatus={[weak self] s in Task{@MainActor in if self?.testing==true{self?.message=s}}}
-  c.onFatal={[weak self] e in
-   Task{@MainActor in
-    guard let self,self.testing else{return}
-    self.message="连接失败 "+e;self.testing=false;self.tester?.stop();self.tester=nil
-   }
-  }
-  c.onMessage={[weak self] obj in
-   let hasErr=obj["error_message"] != nil || obj["error"] != nil
-   let code=(obj["error_code"] as? Int).map(String.init)
-   let hasValidResponse = obj["tokens"] is [[String:Any]] || obj["finished"] as? Bool == true
-   Task{@MainActor in
-    guard let self,self.testing else{return}
-    if hasErr || code != nil{
-     self.message="Soniox 返回错误，错误码 "+(code ?? "未知");self.testing=false;self.tester?.stop();self.tester=nil;return
-    }
-    guard hasValidResponse else{return}
-    self.message="已收到 Soniox 响应，连接可用";self.testing=false;self.tester?.stop();self.tester=nil
-   }
-  }
-  c.start(k)
-  Task{@MainActor in
-   try? await Task.sleep(for:.seconds(1))
-   guard testing else{return}
-   c.send(Data(repeating:0,count:32000),voiced:false)
-   try? await Task.sleep(for:.seconds(8))
-   if testing{message="未收到有效识别响应，请检查 Key、网络或余额";testing=false;c.stop();tester=nil}
-  }
- }
- func refresh(){
-  let fm=FileManager.default
-  guard let dest=fm.urls(for:.documentDirectory,in:.userDomainMask).first else{return}
-  if let source=Store.root?.appendingPathComponent("Sessions"),let urls=try? fm.contentsOfDirectory(at:source,includingPropertiesForKeys:nil){
-   for url in urls where ["srt","json"].contains(url.pathExtension){
-    if let data=try? Data(contentsOf:url){try? data.write(to:dest.appendingPathComponent(url.lastPathComponent),options:.atomic)
-     if url.pathExtension=="srt",let s=String(data:data,encoding:.utf8){
-      let lines=s.components(separatedBy:"\n").filter{!$0.contains(" --> ") && Int($0)==nil}
-      try? lines.joined(separator:"\n").write(to:dest.appendingPathComponent(url.deletingPathExtension().lastPathComponent+".txt"),atomically:true,encoding:.utf8)
-     }
-    }
-   }
-  }
-  documents=((try? fm.contentsOfDirectory(at:dest,includingPropertiesForKeys:nil)) ?? []).filter{["srt","txt","json"].contains($0.pathExtension)}.sorted{$0.lastPathComponent>$1.lastPathComponent}
  }
 }
-struct Home:View{
- @StateObject private var picture=Picture()
- @State private var model=HomeModel()
- var body:some View{
-  content(model)
+
+struct RootView: View {
+ @Environment(SettingsStore.self) private var settings
+ @Environment(HistoryStore.self) private var history
+ @Environment(CaptionPiP.self) private var pip
+ @State private var tab = "live"
+ var body: some View {
+  TabView(selection: $tab) {
+   Tab("字幕", systemImage: "captions.bubble", value: "live") { LiveView() }
+   Tab("历史", systemImage: "clock.arrow.circlepath", value: "history") { HistoryListView() }
+   Tab("设置", systemImage: "slider.horizontal.3", value: "settings") { SettingsView() }
+   Tab("诊断", systemImage: "stethoscope", value: "diagnostics") { DiagnosticsView() }
+  }
+  .onAppear {
+   pip.settings = settings.settings
+   #if DEBUG
+   if ProcessInfo.processInfo.arguments.contains("--ui-testing-seed-history") { history.seedForUITests() }
+   #endif
+   history.refresh()
+  }
+  .onChange(of: settings.settings) { _, value in
+   settings.persist()
+   pip.settings = value.normalized()
+  }
+  .onChange(of: pip.phase) { _, phase in if phase != .running { history.refresh() } }
  }
- private func content(_ model:HomeModel)->some View{
-  @Bindable var m=model
-  return NavigationStack{
-   ScrollView{
-    VStack(alignment:.leading,spacing:20){
-     VStack(alignment:.leading,spacing:6){
+}
+
+// MARK: - Live
+
+struct LiveView: View {
+ @Environment(CaptionPiP.self) private var pip
+ @Environment(SettingsStore.self) private var settings
+ var body: some View {
+  NavigationStack {
+   ScrollView {
+    VStack(alignment: .leading, spacing: 18) {
+     VStack(alignment: .leading, spacing: 6) {
       Text("听见世界，看懂每一句").font(.largeTitle.weight(.bold))
-      Text("原文在上，中文在下。声音只送往你的 Soniox 账户。").foregroundStyle(.secondary)
+      Text("系统声音只送往你自己的 Soniox 账户。").foregroundStyle(.secondary)
      }
-     VideoSurface(picture:picture).frame(height:135).clipShape(RoundedRectangle(cornerRadius:20,style:.continuous))
-     GlassCard{
-      HStack{
-       Button("开启画中画"){picture.start()}.glassProminentButton().accessibilityIdentifier("pip.start")
-       Button("关闭"){picture.stop()}.glassButton()
-      }
-      TimelineView(.periodic(from:.now,by:3)){_ in
-       Text(m.captureStatus).accessibilityIdentifier("capture.status").font(.callout.weight(.medium)).frame(maxWidth:.infinity,alignment:.leading)
-      }
-      Text(picture.status).accessibilityIdentifier("pip.status").font(.caption).foregroundStyle(.secondary)
-      Text(m.previousDiagnostic).font(.caption2).textSelection(.enabled)
-      HStack{
-       Button("复制上次记录"){UIPasteboard.general.string=m.previousDiagnostic}.glassButton()
-       Button("导出诊断"){m.exportDiagnostics()}.glassButton()
-      }
-      Text("关键操作前同步落盘，保留上次会话。日志不含 Key、字幕或音频；不能捕获所有崩溃。").font(.caption2).foregroundStyle(.secondary)
-      Text("先开启画中画，再点系统广播按钮。也可在控制中心长按录屏，选择双语字幕。麦克风可关闭。").font(.callout)
-      BroadcastPicker().frame(width:56,height:56)
+     VideoSurface(pip: pip)
+      .aspectRatio(CGFloat(CaptionRenderer.width) / CGFloat(CaptionRenderer.height(for: settings.settings)), contentMode: .fit)
+      .frame(maxWidth: .infinity)
+      .background(Color.black)
+      .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+      .accessibilityIdentifier("pip.preview")
+
+     if pip.phase == .stopped || pip.phase == .stale {
+      GlassCard {
+       Label(pip.phase == .stopped ? "录屏已停止" : "录屏信号中断", systemImage: "exclamationmark.triangle.fill")
+        .font(.headline).foregroundStyle(.yellow)
+       Text("系统录屏结束后字幕不会再更新。点「重新开始」再次开启。").font(.callout)
+       Button("重新开始") { pip.oneTapStart() }.buttonStyle(.glassProminent).accessibilityIdentifier("start.again")
+      }.accessibilityIdentifier("broadcast.stopped.banner")
      }
-     GlassCard{
-      Text("自己的 Soniox").font(.title3.bold())
-      SecureField("API Key",text:$m.key).accessibilityIdentifier("key.input").textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never).padding(12).background(.quaternary,in:RoundedRectangle(cornerRadius:12,style:.continuous))
-      #if DEBUG
-      if ProcessInfo.processInfo.arguments.contains("--ui-testing"){
-       Text("Stored length: \(Store.key().count)").accessibilityIdentifier("key.persistedLength")
+
+     GlassCard {
+      Button { pip.oneTapStart() } label: {
+       Label(pip.phase == .running ? "开启悬浮字幕" : "开始", systemImage: "play.fill")
+        .font(.title3.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 6)
       }
-      #endif
-      HStack{
-       Button("保存到钥匙串"){
-        m.saveKey()
-       }.glassButton().accessibilityIdentifier("key.save")
-       Button(m.testing ? "测试中…" : "测试连接"){m.test()}.disabled(m.testing || m.key.isEmpty).glassButton().accessibilityIdentifier("key.test")
+      .buttonStyle(.glassProminent).tint(.orange)
+      .disabled(!settings.hasKey)
+      .accessibilityIdentifier("start.oneTap")
+      if !settings.hasKey {
+       Text("先到「设置」保存 Soniox Key。").font(.callout).foregroundStyle(.orange).accessibilityIdentifier("start.needsKey")
       }
-      Text("共享钥匙串不通时仍可保存和测试连接，但广播扩展读不到 Key，不能广播。").font(.caption).foregroundStyle(.secondary)
-      if !m.message.isEmpty{Text(m.message).accessibilityIdentifier("connection.status").font(.caption).foregroundStyle(.secondary)}
-      DisclosureGroup("诊断信息",isExpanded:$m.diagOpen){
-       Text(m.diagnostic).font(.system(.caption2,design:.monospaced)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)
-       Button("复制诊断"){UIPasteboard.general.string=m.diagnostic}.glassButton()
-      }.font(.callout)
+      HStack(spacing: 12) {
+       Button("只开悬浮字幕") { pip.arm(); pip.startPictureInPicture() }.buttonStyle(.glass).accessibilityIdentifier("pip.start")
+       Button("关闭悬浮字幕") { pip.stopAll() }.buttonStyle(.glass).accessibilityIdentifier("pip.stop")
+       Spacer()
+       BroadcastPicker(launcher: pip.launcher).frame(width: 44, height: 44).accessibilityIdentifier("broadcast.picker")
+      }
+      Text(pip.status).font(.callout.weight(.medium)).accessibilityIdentifier("pip.status")
+      Text(pip.captureStatus).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("capture.status")
      }
-     GlassCard{
-      HStack{Text("会话存档").font(.title3.bold());Spacer();Button("刷新"){m.refresh()}.glassButton()}
-      ForEach(m.documents,id:\.self){url in
-       Button{m.share=[url];m.showShare=true}label:{Label(url.lastPathComponent,systemImage:"square.and.arrow.up").font(.caption).lineLimit(2)}
-      }
-      Text("北京时间命名。广播结束后刷新，SRT、纯文本与未确认尾句恢复 JSON 会复制到本机文档目录。原文与译文独立断句，译文时间近似，不保证一一对应。录屏可能受播放器保护限制；画中画不保证能与其他视频画中画共存。").font(.footnote).foregroundStyle(.secondary)
+
+     GlassCard {
+      Text("怎么用").font(.headline)
+      Text("1. 点「开始」：悬浮字幕窗弹出，同时打开系统录屏面板。\n2. 在面板里选「双语字幕」，点「开始直播」。麦克风保持关闭。\n3. 回到视频 App 播放，字幕显示在悬浮窗里。\n4. 录屏停止后悬浮窗会提示，回到这里点「重新开始」。")
+       .font(.callout).foregroundStyle(.secondary)
+      Text("iOS 不允许 App 自己开始系统录屏，第 2 步必须由你在系统面板里点一下。受版权保护的视频，系统可能给录屏静音。画中画同一时间只能有一个，视频 App 自己的画中画会顶替字幕窗。")
+       .font(.footnote).foregroundStyle(.secondary)
      }
     }.padding(20)
-   }.scrollContentBackground(.hidden).navigationTitle("双语字幕").navigationBarTitleDisplayMode(.large)
-   .onAppear{m.refresh()}
-   .sheet(isPresented:$m.showShare){ShareView(items:m.share)}
+   }
+   .navigationTitle("双语字幕").navigationBarTitleDisplayMode(.inline)
   }
  }
 }
-struct BroadcastPicker:UIViewRepresentable{
- func makeUIView(context:Context)->RPSystemBroadcastPickerView{
-  let v=RPSystemBroadcastPickerView(frame:CGRect(x:0,y:0,width:56,height:56))
-  v.preferredExtension=SharedSigning.broadcastIdentifier;v.showsMicrophoneButton=true;return v
+
+struct VideoSurface: UIViewRepresentable {
+ let pip: CaptionPiP
+ func makeUIView(context: Context) -> Surface {
+  let v = Surface(); v.backgroundColor = .black; v.pip = pip
+  return v
  }
- func updateUIView(_ uiView:RPSystemBroadcastPickerView,context:Context){}
-}
-struct ShareView:UIViewControllerRepresentable{
- let items:[URL]
- func makeUIViewController(context:Context)->UIActivityViewController{UIActivityViewController(activityItems:items,applicationActivities:nil)}
- func updateUIViewController(_ uiViewController:UIActivityViewController,context:Context){}
+ func updateUIView(_ uiView: Surface, context: Context) {}
+ final class Surface: UIView {
+  var pip: CaptionPiP?
+  override func didMoveToWindow() {
+   super.didMoveToWindow()
+   if window != nil { pip?.attach(to: self) }
+  }
+  override func layoutSubviews() {
+   super.layoutSubviews()
+   pip?.layer.frame = bounds
+  }
+ }
 }
 
-struct GlassCard<Content:View>:View{
- @ViewBuilder var content:Content
- var body:some View{
-  let stack=VStack(alignment:.leading,spacing:12){content}.frame(maxWidth:.infinity,alignment:.leading).padding(16)
-  if #available(iOS 26,*){stack.glassEffect(.regular,in:RoundedRectangle(cornerRadius:24,style:.continuous))}
-  else{stack.background(.ultraThinMaterial,in:RoundedRectangle(cornerRadius:24,style:.continuous))}
+struct BroadcastPicker: UIViewRepresentable {
+ let launcher: BroadcastLauncher
+ func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
+  let v = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
+  v.preferredExtension = SharedSigning.broadcastIdentifier
+  v.showsMicrophoneButton = false
+  launcher.picker = v
+  return v
+ }
+ func updateUIView(_ uiView: RPSystemBroadcastPickerView, context: Context) { launcher.picker = uiView }
+}
+
+struct GlassCard<Content: View>: View {
+ @ViewBuilder var content: Content
+ var body: some View {
+  VStack(alignment: .leading, spacing: 12) { content }
+   .frame(maxWidth: .infinity, alignment: .leading)
+   .padding(16)
+   .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
  }
 }
-extension View{
- @ViewBuilder func glassButton()->some View{
-  if #available(iOS 26,*){self.buttonStyle(.glass)}else{self.buttonStyle(.bordered)}
+
+// MARK: - History
+
+struct HistoryListView: View {
+ @Environment(HistoryStore.self) private var history
+ var body: some View {
+  NavigationStack {
+   Group {
+    if history.entries.isEmpty {
+     ContentUnavailableView("还没有字幕记录", systemImage: "text.bubble",
+      description: Text("每次录屏的完整字幕会自动保存在这里。"))
+      .accessibilityIdentifier("history.empty")
+    } else {
+     List {
+      ForEach(history.entries) { entry in
+       NavigationLink(value: entry.id) {
+        VStack(alignment: .leading, spacing: 4) {
+         Text(entry.title).font(.headline)
+         Text(Language.name(entry.source) + " → " + Language.name(entry.target) + " · " + HistoryEntry.clock(entry.durationMS) + (entry.ended == nil ? " · 进行中" : ""))
+          .font(.caption).foregroundStyle(.secondary)
+         if !entry.preview.isEmpty { Text(entry.preview).font(.callout).lineLimit(2) }
+        }
+       }
+       .accessibilityIdentifier("history.row")
+      }
+      .onDelete { offsets in offsets.map { history.entries[$0] }.forEach(history.delete) }
+     }
+    }
+   }
+   .navigationTitle("历史记录")
+   .navigationDestination(for: String.self) { id in
+    if let entry = history.entries.first(where: { $0.id == id }) { HistoryDetailView(entry: entry) }
+   }
+   .refreshable { history.refresh() }
+   .onAppear { history.refresh() }
+  }
  }
- @ViewBuilder func glassProminentButton()->some View{
-  if #available(iOS 26,*){self.buttonStyle(.glassProminent)}else{self.buttonStyle(.borderedProminent)}
+}
+
+struct HistoryDetailView: View {
+ let entry: HistoryEntry
+ @Environment(HistoryStore.self) private var history
+ @Environment(\.dismiss) private var dismiss
+ @State private var mode: DisplayMode = .bilingual
+ @State private var confirmDelete = false
+ @State private var copied = false
+ var body: some View {
+  List {
+   Section {
+    Picker("显示", selection: $mode) {
+     ForEach(DisplayMode.allCases) { Text($0.title).tag($0) }
+    }.pickerStyle(.segmented).accessibilityIdentifier("history.mode")
+   }
+   Section {
+    ForEach(entry.rows) { row in
+     VStack(alignment: .leading, spacing: 4) {
+      Text(HistoryEntry.clock(row.startMS)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+      if mode != .translationOnly && !row.original.isEmpty { Text(row.original).foregroundStyle(.secondary) }
+      if mode != .originalOnly && !row.translation.isEmpty { Text(row.translation).font(.body.weight(.medium)) }
+     }
+     .textSelection(.enabled)
+    }
+    if !entry.pendingOriginal.isEmpty || !entry.pendingTranslation.isEmpty {
+     Text("未确认尾句：" + [entry.pendingOriginal, entry.pendingTranslation].filter { !$0.isEmpty }.joined(separator: " / "))
+      .font(.caption).foregroundStyle(.secondary)
+    }
+   }
+  }
+  .accessibilityIdentifier("history.detail")
+  .navigationTitle(entry.title)
+  .toolbar {
+   ToolbarItemGroup(placement: .topBarTrailing) {
+    Button { UIPasteboard.general.string = entry.plainText(mode); copied = true } label: {
+     Image(systemName: copied ? "checkmark" : "doc.on.doc")
+    }.accessibilityIdentifier("history.copy").accessibilityLabel("复制")
+    if let txt = history.exportFile(entry, mode: mode, srt: false), let srt = history.exportFile(entry, mode: mode, srt: true) {
+     ShareLink(items: [txt, srt]) { Image(systemName: "square.and.arrow.up") }
+      .accessibilityIdentifier("history.share").accessibilityLabel("分享")
+    }
+    Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
+     .accessibilityIdentifier("history.delete").accessibilityLabel("删除记录")
+   }
+  }
+  .confirmationDialog("删除这条字幕记录？", isPresented: $confirmDelete, titleVisibility: .visible) {
+   Button("删除", role: .destructive) { history.delete(entry); dismiss() }.accessibilityIdentifier("history.delete.confirm")
+  }
+  .overlay(alignment: .bottom) {
+   if copied {
+    Text("已复制").font(.callout).padding(.horizontal, 14).padding(.vertical, 8)
+     .glassEffect(.regular, in: Capsule()).padding(.bottom, 24).accessibilityIdentifier("history.copied")
+   }
+  }
+ }
+}
+
+// MARK: - Settings
+
+struct SettingsView: View {
+ @Environment(SettingsStore.self) private var store
+ var body: some View {
+  @Bindable var store = store
+  NavigationStack {
+   Form {
+    Section {
+     SecureField(store.hasKey ? "已保存（输入新 Key 替换）" : "Soniox API Key", text: $store.keyDraft)
+      .textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never)
+      .accessibilityIdentifier("key.input")
+     HStack {
+      Button("保存 Key") { store.saveKey() }.buttonStyle(.glass)
+       .disabled(store.keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+       .accessibilityIdentifier("key.save")
+      Button(store.testing ? "测试中…" : "测试连接") { store.testKey() }.buttonStyle(.glass)
+       .disabled(store.testing || (!store.hasKey && store.keyDraft.isEmpty))
+       .accessibilityIdentifier("key.test")
+     }
+     if !store.message.isEmpty { Text(store.message).font(.caption).accessibilityIdentifier("connection.status") }
+     #if DEBUG
+     if ProcessInfo.processInfo.arguments.contains("--ui-testing") {
+      Text("Stored length: \(store.storedKeyLength)").accessibilityIdentifier("key.persistedLength")
+     }
+     #endif
+    } header: { Text("Soniox Key") } footer: {
+     Text("Key 只存在本机钥匙串，不写入字幕、日志或诊断。")
+    }
+
+    Section("语言") {
+     Picker("源语言", selection: $store.settings.languages.source) {
+      ForEach(Language.sources) { Text($0.name).tag($0.code) }
+     }.accessibilityIdentifier("settings.source")
+     Picker("目标语言", selection: $store.settings.languages.target) {
+      ForEach(Language.all) { Text($0.name).tag($0.code) }
+     }.accessibilityIdentifier("settings.target")
+     Text("语言在下一次开始录屏时生效。源语言与目标语言相同时只转写不翻译。").font(.caption).foregroundStyle(.secondary)
+    }
+
+    Section("显示") {
+     Picker("模式", selection: $store.settings.display) {
+      ForEach(DisplayMode.allCases) { Text($0.title).tag($0) }
+     }.pickerStyle(.segmented).accessibilityIdentifier("settings.display")
+     Text("当前：" + store.settings.display.title).font(.caption).foregroundStyle(.secondary)
+      .accessibilityIdentifier("settings.display.value")
+    }
+
+    Section("字幕样式") {
+     StylePreview(settings: store.settings).listRowInsets(EdgeInsets())
+     VStack(alignment: .leading) {
+      Text("字号 \(Int(store.settings.style.fontSize))")
+      Slider(value: $store.settings.style.fontSize, in: SubtitleStyle.fontRange, step: 1)
+       .accessibilityIdentifier("settings.fontSize")
+     }
+     Stepper("每种文字最多 \(store.settings.style.lines) 行", value: $store.settings.style.lines, in: SubtitleStyle.lineRange)
+      .accessibilityIdentifier("settings.lines")
+     Picker("译文颜色", selection: $store.settings.style.translationColor) {
+      ForEach(CaptionColor.allCases) { Text($0.title).tag($0) }
+     }.accessibilityIdentifier("settings.translationColor")
+     Picker("原文颜色", selection: $store.settings.style.originalColor) {
+      ForEach(CaptionColor.allCases) { Text($0.title).tag($0) }
+     }.accessibilityIdentifier("settings.originalColor")
+     VStack(alignment: .leading) {
+      Text("背景不透明度 \(Int(store.settings.style.backgroundOpacity * 100))%")
+      Slider(value: $store.settings.style.backgroundOpacity, in: SubtitleStyle.opacityRange)
+       .accessibilityIdentifier("settings.opacity")
+      Text("系统画中画窗口不能透明，悬浮字幕始终是黑底；这个设置用于 App 内预览的字幕底框。")
+       .font(.caption2).foregroundStyle(.secondary)
+     }
+     Toggle("译文在上", isOn: $store.settings.style.translationFirst).accessibilityIdentifier("settings.order")
+     Picker("位置", selection: $store.settings.style.position) {
+      ForEach(CaptionPosition.allCases) { Text($0.title).tag($0) }
+     }.pickerStyle(.segmented).accessibilityIdentifier("settings.position")
+    }
+   }
+   .navigationTitle("设置")
+  }
+ }
+}
+
+/// SwiftUI preview of the caption style over a sample picture.
+struct StylePreview: View {
+ let settings: AppSettings
+ private func color(_ c: CaptionColor) -> Color { let (r, g, b) = c.rgb; return Color(red: r, green: g, blue: b) }
+ var body: some View {
+  let s = settings.style.normalized()
+  let original = Text("This is what the speaker said.").font(.system(size: s.fontSize * 0.55 * (settings.display == .originalOnly ? 1.28 : 1), weight: .medium)).foregroundStyle(color(s.originalColor))
+  let translated = Text("这是说话人刚才说的话。").font(.system(size: s.fontSize * 0.7, weight: .semibold)).foregroundStyle(color(s.translationColor))
+  ZStack(alignment: s.position == .top ? .top : (s.position == .center ? .center : .bottom)) {
+   LinearGradient(colors: [.indigo, .teal, .orange.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
+   VStack(spacing: 4) {
+    switch settings.display {
+    case .originalOnly: original
+    case .translationOnly: translated
+    case .bilingual:
+     if s.translationFirst { translated; original } else { original; translated }
+    }
+   }
+   .multilineTextAlignment(.center).lineLimit(s.lines)
+   .padding(.horizontal, 12).padding(.vertical, 8)
+   .background(Color.black.opacity(s.backgroundOpacity), in: RoundedRectangle(cornerRadius: 8))
+   .padding(10)
+  }
+  .frame(height: 150)
+  .accessibilityIdentifier("settings.preview")
+ }
+}
+
+// MARK: - Diagnostics
+
+struct DiagnosticsView: View {
+ @State private var text = ""
+ @State private var share: URL?
+ @State private var message = ""
+ private func reload() {
+  text = Diagnostics.previousSessionSummary + "\n\n" + SharedSigning.diagnosticText + "\n\n" + CaptureIPC.diagnosticText
+ }
+ var body: some View {
+  NavigationStack {
+   ScrollView {
+    VStack(alignment: .leading, spacing: 14) {
+     HStack {
+      Button("刷新") { reload() }.buttonStyle(.glass)
+      Button("复制") { UIPasteboard.general.string = text; message = "已复制" }.buttonStyle(.glass).accessibilityIdentifier("diag.copy")
+      Button("导出") {
+       if let url = Diagnostics.exportURL { share = url } else { message = "诊断日志暂时无法读取" }
+      }.buttonStyle(.glass).accessibilityIdentifier("diag.export")
+      if let share { ShareLink(item: share) { Image(systemName: "square.and.arrow.up") } }
+     }
+     if !message.isEmpty { Text(message).font(.caption) }
+     Text(text).font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
+      .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("diag.text")
+     Text("诊断只含固定事件名、计数、音频格式和电平，不含 Key、字幕原文或音频。").font(.caption2).foregroundStyle(.secondary)
+    }.padding(20)
+   }
+   .navigationTitle("诊断")
+   .onAppear { reload() }
+  }
  }
 }

@@ -17,12 +17,14 @@ final class Soniox: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
  private var lastReceive=Date()
  private var lastVoice=Date.distantPast
  private var key=""
+ private var config=""
  var onEvent:(@Sendable (CaptureEvent, Int?, String?)->Void)?
  var onMessage:(@Sendable ([String:Any])->Void)?
  var onStatus:(@Sendable (String)->Void)?
  var onFatal:(@Sendable (String)->Void)?
  var onReconnect:(@Sendable ()->Void)?
- func start(_ key:String){queue.async{self.key=key;self.attempt=0;self.ending=false;self.active=true;self.connect()}}
+ /// `config` is the start request JSON from SonioxConfig (it never contains the key).
+ func start(_ key:String,config:String){queue.async{self.key=key;self.config=config;self.attempt=0;self.ending=false;self.active=true;self.connect()}}
  func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
   queue.async { [self] in
    guard active, ws === webSocketTask else { return }
@@ -41,14 +43,10 @@ final class Soniox: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
   generation+=1;let g=generation;ready=false;authenticated=false;pending=0
   var r=URLRequest(url:URL(string:"wss://stt-rt.soniox.com/transcribe-websocket")!)
   r.setValue("Bearer "+key,forHTTPHeaderField:"Authorization")
-  let config=URLSessionConfiguration.ephemeral;config.timeoutIntervalForRequest=120
-  session=URLSession(configuration:config,delegate:self,delegateQueue:nil)
+  let sessionConfig=URLSessionConfiguration.ephemeral;sessionConfig.timeoutIntervalForRequest=120
+  session=URLSession(configuration:sessionConfig,delegate:self,delegateQueue:nil)
   let socket=session!.webSocketTask(with:r);socket.maximumMessageSize=262_144;ws=socket;socket.resume()
-  let cfg:[String:Any]=["model":"stt-rt-v6","audio_format":"s16le","sample_rate":16000,"num_channels":1,
-   "language_hints":["zh","en","ja"],"enable_language_identification":true,"enable_endpoint_detection":true,
-   "translation":["type":"one_way","target_language":"zh"]]
-  let data=try! JSONSerialization.data(withJSONObject:cfg)
-  socket.send(.string(String(decoding:data,as:UTF8.self))){err in self.queue.async{
+  socket.send(.string(self.config)){err in self.queue.async{
    guard g==self.generation else{return}
    if let err = err {self.transportError(err);self.retry();return}
    self.ready=true;self.lastReceive=Date();self.onEvent?(.configSent,nil,nil);self.onStatus?("连接已建立，认证待有效响应确认");self.receive(g)
@@ -64,8 +62,9 @@ final class Soniox: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
  }
  func send(_ data:Data,voiced:Bool){queue.async{
   if voiced{self.lastVoice=Date()}
-  guard self.ready,!self.ending,self.pending+data.count<=64000 else{return}
+  guard self.ready,!self.ending,self.pending+data.count<=96000 else{CaptureIPC.audioDropped(bytes:data.count);return}
   self.pending+=data.count;let g=self.generation
+  CaptureIPC.audioSent(bytes:data.count)
   self.ws?.send(.data(data)){err in self.queue.async{
    guard g==self.generation else{return}
    self.pending=max(0,self.pending-data.count);if let err = err{self.transportError(err);self.retry()}
@@ -90,7 +89,9 @@ final class Soniox: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
      if !self.authenticated { self.authenticated=true;self.onEvent?(.protocolConfirmed,nil,nil) }
      let tokens=obj["tokens"] as? [[String:Any]] ?? []
      let translated=tokens.filter { $0["translation_status"] as? String == "translation" }.count
-     CaptureIPC.tokens(source:tokens.count-translated,translation:translated)
+     let markers=tokens.filter { ($0["text"] as? String).map { $0 == "<end>" || $0 == "<fin>" } ?? true }.count
+     CaptureIPC.tokens(source:max(0,tokens.count-translated-markers),translation:translated)
+     CaptureIPC.serverAudio(final:obj["final_audio_proc_ms"] as? Int,total:obj["total_audio_proc_ms"] as? Int)
      self.attempt=0
     }
     self.onMessage?(obj)

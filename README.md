@@ -1,69 +1,104 @@
-Live Subs is an experimental iOS 27+ Swift 6 app with a ReplayKit upload extension and sample-buffer Picture in Picture. It is designed to stream app audio, not the microphone, to your own Soniox account; real iOS 27 cross-app capture is not yet verified. API keys stay in a shared Keychain group, never in subtitle archives.
+# Live Subs (双语字幕) for iOS
 
-The transcription and translation streams are deliberately independent. Tokens are processed in received order, and each lane closes only on its own finalized boundary. Late translation cannot clear a new source segment, and multiple boundaries in one response produce separate cues. Chinese source speech can be archived without a translation. Soniox does not guarantee one-to-one source/translation token or segment alignment; translation tokens have no timestamps. SRT therefore uses labeled independent original and translation cues, with translation times approximated from receipt time. These may overlap or appear out of timestamp order. The two PiP lines are latest stream text, not a verified aligned sentence pair.
+An experimental iOS 27+ app that shows live bilingual captions for audio playing in other apps. A ReplayKit broadcast upload extension captures **app audio only** (no microphone, no video frames). It streams that audio to **your own** Soniox account for real-time transcription and translation. The captions appear in a sample-buffer Picture-in-Picture window, Netflix-style: an opaque black strip with outlined text.
 
-Normal stop first writes a recovery snapshot, sends an empty WebSocket TEXT frame, processes remaining tokens, and waits for finished with a short timeout. It does not reconnect while ending. ReplayKit controls the extension lifetime; the ending callback cannot guarantee final network delivery or disk flush. Finalized tails are archived; partial hypotheses remain explicitly uncertain in recovery JSON. Snapshots are saved as responses arrive, also before reconnect and stop. Recovery export is manual, not automatic replay; after an abrupt crash a pending cue may already be present in SRT, so compare before merging. No audio is retained and lost audio cannot be reconstructed.
+Built with Swift 6 (strict concurrency), SwiftUI, Observation (`@Observable`) and Liquid Glass. It uses public APIs only. It is meant for personal SideStore signing and is built unsigned on GitHub Actions with Xcode 27.2 and the iOS 27.2 SDK.
 
-App and extension share the same runtime signing resolver. It reads provisioning-profile hints, configured SharedAppGroupCandidates, and bundle-ID candidates and a default-Keychain-access-group probe using public SecItem APIs. It discovers concrete groups from bounded profile hints, including signer-renamed groups, and independently probes sandbox container and Keychain access. App Group names that pass a Keychain add/remove probe can be used for shared credentials. Other signer access groups are diagnostic-only, not credential destinations. No SecTask/private entitlement API is used. The default access group supplies only a candidate prefix; it is not assumed to be shared. Key saves Update before Add and report OSStatus errors rather than deleting the previous key.
+> Status: preview. Simulator UI tests and offline behavior tests pass in CI. **Nothing here is device-accepted** until it is checked on a real iPhone; see "Device-only checks" below.
 
-SideStore can rewrite bundle IDs and App Groups when resigning. Common team-suffixed groups and all safe, concrete profile-listed groups are considered, but the app cannot enumerate all effective signed entitlements with a public iOS API and cannot fix missing entitlements. Custom resigners may require the same explicit SharedAppGroupCandidates in both Info.plists before signing. If multiple candidates are accessible, they must resolve identically in both processes. The broadcast picker discovers the embedded extension's actual bundle ID instead of constructing it from the parent ID. Existing keys saved by the early hardcoded-group build must be saved again. A container resolving in the app is not proof that the extension has matching permissions.
+## How to use
 
-Build configuration is project.yml for XcodeGen. On a Mac with Xcode, generate the project with xcodegen generate, then build LiveSubs for a generic iOS device with code signing disabled when preparing an archive for personal signing. Disabling signing does NOT embed entitlements. CI therefore explicitly ad-hoc signs the extension first, then the containing app, using the App Group-only entitlement files. No unresolved AppIdentifierPrefix or explicit keychain-access-groups entry is included. These ad-hoc signatures carry metadata for the personal resigner; they do NOT authorize installation or establish working sharing on a device. The standalone public repository includes an unsigned-device build workflow using the documented xcode-27 hosted image and explicitly selected Xcode 27.2 RC. It prints the actual Xcode and SDK versions and checks for iOS 27.2. A successful CI build does not establish device or signing acceptance. The standalone Foundation core regression suite can run on a Swift toolchain with swiftc -parse-as-library Shared/Transcript.swift Shared/Profile.swift Tests/CoreTests.swift -o /tmp/live-subs-core-tests followed by /tmp/live-subs-core-tests. It covers late translation, multiple boundaries, untranslated Chinese, partial replacement, independent lanes, uncertain tails, and JSON recovery. Tests/static_checks.py checks source contracts and plists without pretending to compile Swift.
+1. Open **设置** (Settings). Save your Soniox API key. The key is stored only in the iOS Keychain; it never goes into captions, history, logs or diagnostics. Choose:
+   - the source language: 自动识别 (auto-detect) or a fixed language
+   - the target language
+   - the display mode: 双语 (bilingual), 仅译文 (translation only) or 仅原文 (original only)
+   - the caption style: font size, translation and original colors, lines per lane, translation-above-original order, and position
+2. On **字幕** (Captions), tap **开始** (Start). Live Subs does three things:
+   - It opens the caption PiP window if iOS allows it right away. It also arms auto-PiP, so captions float as soon as you leave the app.
+   - It raises the system broadcast sheet.
+   - It keeps a silent audio session running so the app can keep drawing captions in the background.
+3. In the system sheet, pick **双语字幕** and tap **开始直播** (Start Broadcast). iOS gives apps no public API to start a broadcast, so this one tap always belongs to you. That is the closest public-API version of the one-tap flow.
+4. Play your video. When the system recording stops, the PiP window and the app both say **录屏已停止** (recording stopped). Tap **重新开始** (start again) to reopen it.
+5. **历史** (History) keeps the full caption text of every session inside the app. You can view it as bilingual, original only or translation only. You can copy it, share it as .txt or .srt, or delete it. Swipe or use the trash button to delete. A deleted session is never re-imported.
+6. **诊断** (Diagnostics) shows signing and shared-container probes and extension heartbeat counters. It also shows the audio format, levels and sent bytes, and Soniox processed-audio milliseconds. Diagnostics can be copied or exported. They never contain the key, caption text or audio.
 
-CI compilation status is available in the repository Actions history; the first preview has been tried on an iOS 27 iPhone via SideStore: settings rendered, but key saving failed and starting PiP crashed. This revised preview has not been device-accepted. Remaining acceptance includes real SideStore resigning of both targets, shared Keychain read after save/update/relaunch, correct broadcast extension selection, real system-audio capture, PiP lifetime, late translations and stopping during speech, interrupted network, and recovery-file contents. DRM-protected audio may be unavailable. Concurrent video PiP and this PiP may conflict. Atomic text rewrites and per-response JSON snapshots prioritize recoverability but need long-session memory, I/O and performance testing.
+## Preview 4 changes
 
-Protocol references are https://docs.soniox.com/translation/stt-translation/rt-translation and https://docs.soniox.com/api-reference/stt/websocket-api . Apple's shared-group behavior is documented at https://developer.apple.com/documentation/security/ksecattraccessgroup . SideStore signing caveats are illustrated by https://github.com/SideStore/SideStore/issues/1437 and https://github.com/SideStore/SideStore/issues/1432 . These references do not establish that this build has passed device acceptance.
+### Captions now come out (audio path rewrite)
 
-The build enables Swift 6 language mode with complete strict concurrency checking. Settings state uses a MainActor Observable model. PiP rendering is MainActor-isolated. Socket and transcript callbacks currently use an explicit serial-queue confinement boundary rather than a full actor rewrite; the two queue/ReplayKit bridge classes declare unchecked Sendable with the isolation contract documented in code. This is a limited migration, not a claim that the networking layer already uses actors or async/await throughout. Future macOS 27 work is not included in this iOS app.
+Preview 3 received 1,063,936 app-audio frames and Soniox confirmed the session, but returned zero tokens. The old path guessed the input layout through `AVAudioFormat(cmAudioFormatDescription:)` and `AVAudioConverter`.
 
-## iOS 27 capture compatibility boundary
+The extension now reads the `AudioStreamBasicDescription` and decodes exactly what ReplayKit delivers:
 
-This preview keeps the ReplayKit broadcast extension. RPBroadcastSampleHandler and RPSystemBroadcastPickerView are deprecated on iOS 27; deprecation is not an unavailable declaration, and compilation does not establish runtime compatibility.
+- 8/16/24/32-bit integer or 32/64-bit float
+- big- or little-endian
+- interleaved or planar
 
-Apple metadata lists SCStreamConfiguration.capturesAudio and SCStreamOutputType.audio as introduced on iOS/iPadOS 27.0. Their descriptions define audio capture and audio sample buffers, but do not explicitly establish capture of audio from other apps on iOS. The official iOS sample attaches screen and microphone outputs, not an audio output. The framework overview says ScreenCaptureKit replaces ReplayKit for screen streaming and mirroring and that a broadcast extension is no longer necessary; that statement alone does not verify cross-app system audio for this use case. We therefore do not replace or remove the broadcast extension on that basis.
+It then downmixes to mono and resamples to 16 kHz with a stateful box-filter resampler. It sends 100 ms little-endian `s16le` frames.
 
-References: https://developer.apple.com/tutorials/data/documentation/screencapturekit/scstreamconfiguration/capturesaudio.json and https://developer.apple.com/tutorials/data/documentation/screencapturekit/scstreamoutputtype/audio.json and https://developer.apple.com/documentation/screencapturekit/capturing-screen-content-on-ios .
+The preview 3 root cause is **not proven**. A layout mismatch is the leading suspect: ReplayKit app audio has often been reported as big-endian 16-bit PCM, and a mismatch turns speech into noise that a recognizer returns no words for. The other suspects are a silent or protected source and a converter that produced nothing usable. Offline tests run the shipped decoder on nine layouts, including that one, and check frequency, amplitude and drift. They also show that an endianness mismatch is detectable.
 
-Neither capture path has been accepted on a real iOS 27 device for this app. SideStore re-signing, App Group and shared Keychain access, cross-app audio, PiP background lifetime, and protected media behavior remain device acceptance gates.
+New diagnostics separate the remaining possibilities on a device:
 
-## Preview 2 signing acceptance boundary
+- delivered frames vs bytes actually sent
+- the detected format
+- peak level (a silent or protected source)
+- Soniox `final_audio_proc_ms` / `total_audio_proc_ms`
+- dropped bytes
 
-CI extracts entitlements from the built app and extension using codesign and asserts that both declare exactly group.com.aian.livesubs. It verifies both ad-hoc signatures, the broadcast metadata, the compiled Assets.car, CFBundleIcons, and icon resources before packaging. The downloadable IPA retains the historical filename LiveSubs-unsigned.ipa; here "unsigned" means no personal/development/distribution identity or provisioning profile, NOT an absence of ad-hoc signatures.
+### PiP opens on the first tap
 
-The former unsigned-entitlements metadata blocker is addressed only when those artifact checks pass. Personal signing remains an unverified device gate. SideStore must register and authorize the same rewritten App Group in BOTH profiles and final signatures. The extension needs a real shared container and a readable shared credential. Missing sharing does not block the main app from saving to its own Keychain and testing Soniox; the UI explicitly says that private-only saving cannot enable the extension. No credential file fallback or UserDefaults storage is enabled. Independent probes are NOT a round-trip confirmation that both processes chose the same container. Key save, extension key read, caption updates, and a second refresh/re-sign must still be tested on an actual phone. Do not describe this preview as SideStore-verified.
+Preview 3 recreated the `AVPictureInPictureController` on every tap and waited for the layer's `isReadyForDisplay`. That never became true on the device, so it timed out (code 2).
 
-SideStore's current develop signing source reads application groups from target entitlements and appends the team identifier when registering groups. This is source evidence, not a promise about the installed SideStore version or a free team's resulting profile.
-https://github.com/SideStore/SideStore/blob/develop/SideStore/Core/Operations/PipelineOperations/FetchProvisioningProfilesOperation.swift
-Apple distinguishes profile authorization from the entitlements actually claimed by a signature.
-https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles
+Now:
 
-Remaining issues include PiP background suspension without an active audio track, SRT source-time drift across dropped audio/silent gaps/reconnects, possible original/translation mismatch by design, and a plain-text export that can omit numeric-only lines. None is represented as device-accepted.
+- **One layer and one controller** live for the whole app session. The controller is created as soon as the layer is in a window.
+- **No `isReadyForDisplay` gate.** The only precondition is the controller's own `isPictureInPicturePossible`, observed with KVO. One tap is one request; it starts as soon as PiP is possible, with one silent retry if the system drops the call.
+- Frames are **IOSurface-backed 32BGRA** from a pixel-buffer pool, with `DisplayImmediately`. They are fed continuously and re-fed every second. Preview 3 used non-IOSurface 32ARGB.
+- A failed renderer (`-11847 Operation interrupted` after backgrounding) is **flushed and fed again**. The layer and controller are never rebuilt.
+- `canStartPictureInPictureAutomaticallyFromInline` is armed after Start, so leaving the app opens PiP even if the in-app start was not yet allowed.
 
-## iOS 27 first-device fixes and diagnostic boundaries
+## Build
 
-SideStore develop was checked on 2026-11-04: the repository is not archived and reports its latest push as 2026-10-27. Its adjustedGroupIdentifier normally appends the team ID to an App Group, with a special case-correction flow that can return a group based on the resigned app ID. Runtime discovery does not assume either spelling. Profile XML is bounded, rejects custom DTD/entities, duplicate XML payloads, wildcards and unsafe identifiers. It is NOT cryptographic verification of the CMS profile. Only successful OS container and SecItem operations establish access. Profile absence is allowed; bundle/config/default-group hints remain fallbacks. No private SecTask entitlement API is used.
+`project.yml` is the XcodeGen spec; run `xcodegen generate`. CI (`.github/workflows/live-subs-ios.yml`) has two stages:
 
-Main-app key saving attempts the private app access group and eligible shared Keychain groups independently. No group means private/default Keychain storage and connection testing remain possible, not extension sharing. Diagnostic text lists bundle ID, profile presence, candidate and available groups, container results and Keychain OSStatus, never the credential. The extension does not fall back to its own private Keychain. There is no plaintext credential file fallback.
+1. It runs the simulator UI gate on a fresh iOS 27 simulator. It needs no real credential and uses a fixed invalid placeholder key.
+2. It then:
+   - runs the static and behavior checks and the Swift test executables
+   - builds the unsigned device app
+   - ad-hoc signs the extension, then the app, to embed App Group entitlement metadata for the personal re-signer
+   - verifies the bundle and packages `LiveSubs-unsigned.ipa` with `SHA256SUMS`
 
-PiP playback delegate callbacks are explicitly nonisolated and return only immutable playback constants or invoke completion directly. UI changes hop to MainActor. Support, visible layer, audio-session activation, first frame and controller readiness are checked before start. These are risk reductions, NOT an established root cause or a claim that the observed crash is fixed.
+"Unsigned" means no development or distribution identity or provisioning profile. Ad-hoc signatures do not authorize installation.
 
-Before each key PiP operation, fixed allowlisted event markers are synchronously written and FileHandle.synchronize() is called before returning. The first frame is logged; routine rendering is not synced every frame. Previous-session.log is preserved before the next session begins, and its last event is visible and copyable in the app. Export diagnostics includes those logs and nonsecret signing diagnostics. Documents sharing is enabled. Logging is best effort: write or synchronization errors are not guaranteed to be surfaced. Filesystem failures can still prevent logging, and a returned start call does not mean PiP actually started; didStart is recorded separately.
+The Foundation-only tests run anywhere with a Swift 6 toolchain: `python3 Tests/static_checks.py` (also runs `Tests/FeatureTests.swift`), `Tests/capture_ipc_checks.py` and `Tests/pip_policy_checks.py`.
 
-NSSetUncaughtExceptionHandler records only a small fixed exception-name category. It cannot reliably intercept Swift fatal errors, actor assertions, all Objective-C exceptions or process termination. There is no custom signal handler. No system crash report is required for the next test. Use the persistent last-step diagnostics to investigate if the problem recurs.
+## Signing and sharing
 
-Public API references:
-https://developer.apple.com/documentation/security/ksecattraccessgroup
-https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps
-https://developer.apple.com/documentation/avkit/adopting-picture-in-picture-in-a-custom-player
-https://developer.apple.com/documentation/foundation/filehandle/synchronize()
+The app and the extension share one runtime resolver. It uses three sources:
 
-The simulator gate uses a newly created iOS 27 iPhone simulator, a hardcoded invalid test-only credential and unsigned-source/ad-hoc simulator hosting. It validates save/relaunch, bounded error handling and a PiP request without app termination. It records unsupported, controlled refusal or actual didStart separately; no result simulates SideStore authorization or cross-app recording. Device packaging depends on this job. Artifacts include xcresult screenshots, process logs and available app crash reports. PiP diagnostics include numeric layer status/readiness/error, host attachment and first-frame format/PTS. Successful enqueue is explicitly NOT proof of actual screen presentation.
+- provisioning-profile hints, decoded as bounded XML
+- configured `SharedAppGroupCandidates`
+- bundle-ID-derived candidates, including SideStore's team-suffixed `group.com.aian.livesubs.<TEAMID>`
 
+Each candidate is checked with real OS probes: `containerURL(forSecurityApplicationGroupIdentifier:)` and SecItem add/remove. No private entitlement API is used. The preview 3 device showed the team-suffixed group working in both the app and the extension (`keySuccess: true`).
 
-## Preview 3 diagnostic acceptance boundary
+## Device-only checks (not verified by CI or the simulator)
 
-The preview 2 device diagnostic establishes only main-app access to a team-suffixed App Group and a successful shared-Keychain authorization probe. It does not establish that the broadcast extension chose the same group or could read the credential. The device selected and started the system broadcast but no captions appeared. One PiP attempt returned without activation callbacks; a later attempt received didStart and then didStop. The stop reason and renderer-failure root cause have not been established. Neither absence of text nor a returned start method proves audio capture or active PiP.
+- PiP opens on the first tap on a real iOS 27 device, and stays visible over other apps.
+- The background silent-audio keep-alive keeps captions updating while another app plays. Also check that it neither ducks nor stops the other app's sound.
+- Real system-audio capture produces Soniox source and translation tokens. Check the diagnostics format line, peak level and `serverTotalAudioMS`.
+- DRM-protected players may hand ReplayKit silence. The diagnostics would show a peak level below −60 dBFS.
+- iPhone shows one PiP at a time; a video app's own PiP replaces the caption window.
+- `sendActions` on the system picker's button raises the broadcast sheet. If iOS changes the picker's view structure, tap the small record button instead.
+- The stop prompt appears in PiP and in the app after the recording ends.
+- SideStore re-signing of both targets, shared Keychain read after save, relaunch and refresh.
+- Long sessions: extension memory, history file size, reconnects.
 
-Preview 3 adds extension-owned bounded lifecycle, signing, audio-counter, transport/authentication and token-count diagnostics plus a shared heartbeat. The main app can merge those records only when both processes actually access the same container. Missing heartbeat cannot distinguish an unstarted extension, early termination or missing/mismatched sharing. A private extension fallback log is not readable from the app and must never be presented as merged evidence. Logs exclude keys, subtitle text, raw server echoes and audio. Critical writes are best effort synchronous flushes, not a guarantee of crash interception or persisted data after termination.
+## References
 
-Audio buffer/frame counters describe delivered audioApp buffers, not audible speech. WebSocket configuration send is not authentication confirmation. Translation and source token counts are independent. Expired heartbeats are not proof of an explicit stop. Continuous rendering, bounded readiness/start recovery and error logging still require device testing; a ready-for-display frame is not proof that a user saw the PiP window. Simulator tests cannot verify SideStore-resigned entitlements, actual system-audio capture or device PiP.
+- https://docs.soniox.com/api-reference/stt/websocket-api
+- https://docs.soniox.com/translation/stt-translation/rt-translation
+- https://developer.apple.com/documentation/avkit/adopting-picture-in-picture-in-a-custom-player
+- https://developer.apple.com/documentation/replaykit
+- https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps
