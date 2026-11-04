@@ -13,12 +13,16 @@ handler = text("Broadcast/SampleHandler.swift")
 store = text("Shared/Core.swift")
 signing = text("Shared/Signing.swift")
 app = text("App/LiveSubsApp.swift")
+project = text("project.yml")
 checks = 0
 def check(value, description):
     global checks
     assert value, description
     checks += 1
 
+check('SWIFT_VERSION: "6.0"' in project and 'SWIFT_STRICT_CONCURRENCY: complete' in project, "strict Swift 6 build")
+check('INFOPLIST_FILE: App/Info.plist' in project and 'INFOPLIST_FILE: Broadcast/Info.plist' in project, "preserve supplied plists")
+check('    info:' not in project, "do not regenerate supplied signing and broadcast configuration")
 for folder, filename in [("App", "LiveSubs.entitlements"), ("Broadcast", "Broadcast.entitlements")]:
     info = plistlib.loads((root / folder / "Info.plist").read_bytes())
     ent = plistlib.loads((root / folder / filename).read_bytes())

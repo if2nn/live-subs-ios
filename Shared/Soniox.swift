@@ -16,9 +16,9 @@ final class Soniox: @unchecked Sendable {
  private var lastReceive=Date()
  private var lastVoice=Date.distantPast
  private var key=""
- var onMessage:(([String:Any])->Void)?
- var onStatus:((String)->Void)?
- var onReconnect:(()->Void)?
+ var onMessage:(@Sendable ([String:Any])->Void)?
+ var onStatus:(@Sendable (String)->Void)?
+ var onReconnect:(@Sendable ()->Void)?
  func start(_ key:String){queue.async{self.key=key;self.ending=false;self.active=true;self.connect()}}
  private func connect(){
   guard active else{return}
