@@ -101,7 +101,11 @@ final class LiveSubsUITests: XCTestCase {
   reveal(display)
   XCTAssertTrue(display.exists)
   display.buttons["仅译文"].tap()
-  XCTAssertTrue(wait(app.staticTexts["settings.display.value"]) { $0.label.contains("仅译文") })
+  XCTAssertTrue(wait(display.buttons["仅译文"], timeout: 5) { $0.isSelected }, "segment selected")
+  // The caption row under the picker is a separate lazy cell; bring it on screen.
+  let displayValue = app.staticTexts["settings.display.value"]
+  reveal(displayValue)
+  XCTAssertTrue(wait(displayValue) { $0.label.contains("仅译文") }, "display value: \(displayValue.label)")
   // Style: order toggle and position.
   let orderQuery = NSPredicate(format: "identifier == 'settings.order' OR label == '译文在上'")
   let order = app.switches.matching(orderQuery).firstMatch
