@@ -50,7 +50,7 @@ import Foundation
   let repeated=CaptureState.presentation(snapshot:nil,original:lost.original,translated:lost.translated,updated:now,now:now)
   precondition(repeated.original==lost.original)
   let old=CaptureState.presentation(snapshot:s,original:"old",translated:"旧译文",updated:now.addingTimeInterval(-20),now:now)
-  precondition(old.original.contains("保留上次字幕") && old.translated=="旧译文")
+  precondition(old.original.contains("旧字幕") && old.status.contains("保留上次字幕") && old.translated=="旧译文")
   s.transport="configured";s.lastAudio=now;s.lifecycle="started"
   let fresh=CaptureState.presentation(snapshot:s,original:"fresh",translated:"新译文",updated:now,now:now)
   precondition(fresh.original=="fresh" && fresh.translated=="新译文")

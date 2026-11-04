@@ -75,7 +75,7 @@ enum CaptureState {
   // including defensive handling if a caller accidentally reuses presentation.
   let rawOriginal: String
   if original.hasPrefix("〔状态〕"), let end=original.range(of:"〔/状态〕") {
-   rawOriginal=String(original[end.upperBound...]).trimmingCharacters(in:.newlines)
+   rawOriginal=String(original[end.upperBound...]).trimmingCharacters(in:.whitespacesAndNewlines)
   } else { rawOriginal=original }
   let displayNotice: String
   if !sharedAvailable || snapshot == nil {
