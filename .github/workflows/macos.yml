@@ -1,0 +1,50 @@
+name: LiveSubs macOS
+on:
+  workflow_dispatch:
+  push:
+    branches: [mac-dev]
+    paths: ['macOS/**', '.github/workflows/macos.yml']
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+      - name: Build and unit tests (Swift 6 strict concurrency)
+        working-directory: macOS
+        run: |
+          set -o pipefail
+          swift build -c release -Xswiftc -strict-concurrency=complete 2>&1 | tee build.log
+          swift test -Xswiftc -strict-concurrency=complete 2>&1 | tee test.log
+      - name: Package unsigned universal app
+        working-directory: macOS
+        run: |
+          set -euo pipefail
+          swift build -c release --arch arm64 --arch x86_64 -Xswiftc -strict-concurrency=complete
+          mkdir -p dist/LiveSubs.app/Contents/MacOS
+          cp Info.plist dist/LiveSubs.app/Contents/
+          BIN="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
+          cp "$BIN/LiveSubsMac" dist/LiveSubs.app/Contents/MacOS/
+          plutil -lint dist/LiveSubs.app/Contents/Info.plist
+          lipo -info dist/LiveSubs.app/Contents/MacOS/LiveSubsMac
+          # No Developer ID signature or notarization. No automatic release.
+          cd dist
+          ditto -c -k --keepParent LiveSubs.app LiveSubs-macOS-unsigned.zip
+          shasum -a 256 LiveSubs-macOS-unsigned.zip > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LiveSubs-macOS
+          path: |
+            macOS/dist/LiveSubs-macOS-unsigned.zip
+            macOS/dist/SHA256SUMS
+            macOS/build.log
+            macOS/test.log
+          if-no-files-found: error
+          retention-days: 14
