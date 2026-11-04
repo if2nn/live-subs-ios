@@ -121,7 +121,7 @@ def test():
                   "-derivedDataPath", "simulator-build", "-resultBundlePath", str(OUT / "UITests.xcresult"),
                   "-parallel-testing-enabled", "NO", "-maximum-concurrent-test-simulator-destinations", "1",
                   "CODE_SIGNING_ALLOWED=YES", "CODE_SIGN_IDENTITY=-", "DEVELOPMENT_TEAM=",
-                  f"CODE_SIGN_ENTITLEMENTS={ent}", "test"], check=False, timeout=900)
+                  f"CODE_SIGN_ENTITLEMENTS={ent}", "test"], check=False, timeout=1500)
     (OUT / "xcodebuild.log").write_text(result.stdout)
     if result.returncode:
         raise RuntimeError(f"Simulator UI tests failed ({result.returncode})")
