@@ -14,6 +14,8 @@ final class AudioOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked 
  let failure: @Sendable (String) -> Void
  private var resampler: SpeechResampler?
  private var chunker = SpeechChunker()
+ private var pendingStart: Date?
+ private var pendingSamples = 0
  init(client: Soniox, failure: @escaping @Sendable (String) -> Void) {
   self.client = client; self.failure = failure
  }
@@ -48,13 +50,25 @@ final class AudioOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked 
    }
    guard let mono = PCMDecoder.mono(buffers, frames: frames, d), var r = resampler else { return }
    let samples = r.process(mono); resampler = r
-   for chunk in chunker.append(samples) { client.send(chunk, voiced: chunker.resetPeak() > 300) }
+   // PTS and host clock share the capture clock. Map sample start to wall time,
+   // carrying the oldest sample timestamp across 100 ms chunk boundaries.
+   let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+   let delta = CMTimeGetSeconds(CMTimeSubtract(pts, CMClockGetTime(CMClockGetHostTimeClock())))
+   let sampleStart = Date().addingTimeInterval(delta.isFinite ? delta : -Double(frames) / d.sampleRate)
+   if pendingSamples == 0 { pendingStart = sampleStart }
+   pendingSamples += samples.count
+   for chunk in chunker.append(samples) {
+    client.send(chunk, voiced: chunker.resetPeak() > 300, capturedAt: pendingStart ?? sampleStart)
+    pendingStart = (pendingStart ?? sampleStart).addingTimeInterval(Double(chunk.count) / 32000)
+    pendingSamples -= chunk.count / 2
+   }
   }
  }
  func drain() async {
   await withCheckedContinuation { continuation in
    queue.async { [self] in
-    if let data = chunker.drain() { client.send(data, voiced: true) }
+    if let data = chunker.drain() { client.send(data, voiced: true, capturedAt: pendingStart ?? Date()) }
+    pendingStart = nil; pendingSamples = 0
     continuation.resume()
    }
   }
@@ -88,7 +102,8 @@ final class SystemAudio {
  func stop() async throws {
   let old = stream; let decoder = output
   stream = nil; output = nil
-  if let old { try await old.stopCapture() }
+  do { if let old { try await old.stopCapture() } }
+  catch { await decoder?.drain(); throw error }
   await decoder?.drain()
  }
  enum CaptureFailure: LocalizedError {

@@ -18,6 +18,8 @@ final class Soniox: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
  private var lastVoice=Date.distantPast
  private var key=""
  private var config=""
+ private var firstAudio = true
+ var orderedEvent: (@Sendable (SessionEvent) -> Void)?
  var onEvent:(@Sendable (CaptureEvent, Int?, String?)->Void)?
  var onMessage:(@Sendable ([String:Any])->Void)?
  var onStatus:(@Sendable (String)->Void)?
@@ -40,7 +42,7 @@ final class Soniox: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
  private func connect(){
   guard active else{return}
   onEvent?(.connecting,nil,nil)
-  generation+=1;let g=generation;ready=false;authenticated=false;pending=0
+  generation+=1;let g=generation;ready=false;authenticated=false;pending=0;firstAudio=true
   var r=URLRequest(url:URL(string:"wss://stt-rt.soniox.com/transcribe-websocket")!)
   r.setValue("Bearer "+key,forHTTPHeaderField:"Authorization")
   let sessionConfig=URLSessionConfiguration.ephemeral;sessionConfig.timeoutIntervalForRequest=120
@@ -60,11 +62,13 @@ final class Soniox: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
    if Date().timeIntervalSince(self.lastReceive)>35 && Date().timeIntervalSince(self.lastVoice)<10 {self.retry()}
   };timer=t;t.resume()
  }
- func send(_ data:Data,voiced:Bool){queue.async{
+ func send(_ data:Data,voiced:Bool,capturedAt:Date = Date()){queue.async{
   if voiced{self.lastVoice=Date()}
   guard self.ready,!self.ending,self.pending+data.count<=96000 else{return}
+  guard let socket = self.ws else { return }
+  if self.firstAudio { self.firstAudio=false;self.orderedEvent?(.firstAudio(capturedAt)) }
   self.pending+=data.count;let g=self.generation
-  self.ws?.send(.data(data)){err in self.queue.async{
+  socket.send(.data(data)){err in self.queue.async{
    guard g==self.generation else{return}
    self.pending=max(0,self.pending-data.count);if let err = err{self.transportError(err);self.retry()}
   }}
@@ -91,6 +95,7 @@ final class Soniox: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
      let markers=tokens.filter { ($0["text"] as? String).map { $0 == "<end>" || $0 == "<fin>" } ?? true }.count
      self.attempt=0
     }
+    if let data = try? JSONSerialization.data(withJSONObject: obj) { self.orderedEvent?(.message(data)) }
     self.onMessage?(obj)
     if obj["finished"] as? Bool == true{
      self.onEvent?(.serverFinished,nil,nil)
@@ -111,13 +116,13 @@ final class Soniox: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
   onEvent?(.retrying,status,nil)
   attempt+=1
   let delay=SonioxRetry.delay(attempt:attempt,rateLimited:status==429)
-  onReconnect?();onStatus?("断线，\(Int(delay)) 秒后重连（\(attempt)/\(SonioxRetry.maximumRetries)）")
+  orderedEvent?(.reconnect);onReconnect?();onStatus?("断线，\(Int(delay)) 秒后重连（\(attempt)/\(SonioxRetry.maximumRetries)）")
   queue.asyncAfter(deadline:.now()+delay){if self.active && g==self.generation{self.connect()}}
  }
  private func fail(_ message:String){
   let callback=endCompletion;endCompletion=nil;ending=false
   stopInternal()
-  onFatal?(message)
+  orderedEvent?(.fatal(message));onFatal?(message)
   callback?(false)
  }
  private func stopInternal(){active=false;ready=false;generation+=1;timer?.cancel();timer=nil;ws?.cancel(with:.normalClosure,reason:nil);session?.invalidateAndCancel()}
@@ -138,6 +143,9 @@ final class Soniox: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
  private func completeEnd(_ receivedFinished:Bool){
   let callback=endCompletion;endCompletion=nil;ending=false
   stopInternal();callback?(receivedFinished)
+ }
+ func barrier(_ continuation: CheckedContinuation<Void, Never>) {
+  queue.async { self.orderedEvent?(.barrier(continuation)) }
  }
  func stop(){queue.async{
   if self.ending {self.completeEnd(false)}else{self.stopInternal()}

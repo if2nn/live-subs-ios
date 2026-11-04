@@ -46,7 +46,7 @@ enum Archive {
    .appendingPathComponent("LiveSubsMac/History", isDirectory: true)
  }
  static func save(_ entry: HistoryEntry) throws {
-  guard HistoryEntry.safeID(entry.id), let data = entry.encoded() else { return }
+  guard HistoryEntry.safeID(entry.id), let data = entry.encoded() else { throw CocoaError(.fileWriteInvalidFileName) }
   try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
   try data.write(to: folder.appendingPathComponent(entry.id + ".json"), options: [.atomic])
   try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: folder.appendingPathComponent(entry.id + ".json").path)

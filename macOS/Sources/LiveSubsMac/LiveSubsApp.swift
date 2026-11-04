@@ -29,10 +29,10 @@ final class AppLifecycle: NSObject, NSApplicationDelegate {
  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
   let model = MacModel.shared
   if model.busy { return .terminateCancel }
-  guard model.running else { return .terminateNow }
+  guard model.running else { return model.persist() ? .terminateNow : .terminateCancel }
   Task {
-   await model.stop()
-   sender.reply(toApplicationShouldTerminate: true)
+   let saved = await model.stop()
+   sender.reply(toApplicationShouldTerminate: saved)
   }
   return .terminateLater
  }
@@ -80,6 +80,7 @@ struct Studio: View {
      Circle().fill(model.running ? .green : .secondary).frame(width: 6, height: 6)
      Text(model.status).font(.caption).foregroundStyle(.secondary)
      Spacer()
+     if model.hasUnsavedHistory { Button("重试保存") { model.persist() } }
      Menu("导出全文") {
       Button("纯文本 .txt") { model.export(srt: false) }
       Button("字幕 .srt") { model.export(srt: true) }
@@ -98,7 +99,7 @@ struct Studio: View {
     Spacer()
     SettingsLink { Image(systemName: "slider.horizontal.3") }.help("语言、显示与 API Key")
     Button {
-     Task { if model.running { await model.stop() } else { await model.start() } }
+     Task { if model.running { _ = await model.stop() } else { await model.start() } }
     } label: {
      Label(model.running ? "停止" : "开始聆听", systemImage: model.running ? "stop.fill" : "waveform")
     }.buttonStyle(.borderedProminent).tint(model.running ? .red : .accentColor).disabled(model.busy)
