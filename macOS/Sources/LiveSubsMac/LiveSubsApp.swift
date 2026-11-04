@@ -3,7 +3,8 @@ import AppKit
 
 @main
 struct LiveSubsMacApp: App {
- @State private var model = MacModel()
+ @NSApplicationDelegateAdaptor(AppLifecycle.self) private var lifecycle
+ @State private var model = MacModel.shared
  var body: some Scene {
   WindowGroup("LiveSubs") {
    Studio(model: model)
@@ -20,6 +21,20 @@ struct LiveSubsMacApp: App {
    }
   }
   Settings { Preferences(model: model).frame(width: 470).padding(24) }
+ }
+}
+
+@MainActor
+final class AppLifecycle: NSObject, NSApplicationDelegate {
+ func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+  let model = MacModel.shared
+  if model.busy { return .terminateCancel }
+  guard model.running else { return .terminateNow }
+  Task {
+   await model.stop()
+   sender.reply(toApplicationShouldTerminate: true)
+  }
+  return .terminateLater
  }
 }
 

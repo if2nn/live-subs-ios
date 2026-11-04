@@ -22,6 +22,8 @@ jobs:
           set -o pipefail
           swift build -c release -Xswiftc -strict-concurrency=complete 2>&1 | tee build.log
           swift test -Xswiftc -strict-concurrency=complete 2>&1 | tee test.log
+          swiftc -parse-as-library -swift-version 6 -strict-concurrency=complete Sources/LiveSubsMac/{AudioPCM,Transcript,Settings,History}.swift Regression/Preview4FeatureTests.swift -o /tmp/mac-feature-tests
+          /tmp/mac-feature-tests | tee -a test.log
       - name: Package unsigned universal app
         working-directory: macOS
         run: |

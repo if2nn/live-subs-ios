@@ -3,6 +3,7 @@ import AppKit
 
 @MainActor @Observable
 final class MacModel {
+ static let shared = MacModel()
  var settings = AppSettings.decode(UserDefaults.standard.data(forKey: "settings")) {
   didSet { UserDefaults.standard.set(settings.encoded(), forKey: "settings") }
  }
@@ -123,7 +124,7 @@ final class MacModel {
    p.title = "LiveSubs"; p.level = .floating
    p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
    p.isFloatingPanel = true; p.hidesOnDeactivate = false; p.isReleasedWhenClosed = false
-   p.isMovableByWindowBackground = true; p.backgroundColor = .black
+   p.isMovableByWindowBackground = true; p.isOpaque = false; p.backgroundColor = .clear
    p.contentMinSize = NSSize(width: 360, height: 140)
    p.contentView = NSHostingView(rootView: FloatingCaptions(model: self))
    panel = p
