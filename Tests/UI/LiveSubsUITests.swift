@@ -204,13 +204,18 @@ final class LiveSubsUITests: XCTestCase {
   XCTAssertTrue(value.label.contains("仅译文"), "display mode survives restart: \(value.label)")
   let order2 = app.switches.matching(orderQuery).firstMatch
   reveal(order2)
-  XCTAssertEqual(order2.value as? String, "1", "order toggle survives restart")
+  XCTAssertTrue(Self.isOn(order2), "order toggle survives restart: \(String(describing: order2.value))")
 
   // Invalid key test fails safely (network or not).
   let test = app.buttons["key.test"]
   reveal(test, up: false)
   test.tap()
   let result = app.staticTexts["connection.status"]
+  // The status row can sit outside the lazily-built part of the list after the
+  // tap; bring it on screen before reading it.
+  if !result.waitForExistence(timeout: 5) { reveal(result, up: true) }
+  if !result.exists { reveal(result, up: false) }
+  if !result.exists { capture("settings-status-missing") }
   XCTAssertTrue(wait(result, timeout: 25) { el in ["连接失败", "Soniox 返回错误", "未收到有效识别响应"].contains { el.label.hasPrefix($0) } },
    "invalid key must fail safely: \(result.label)")
   XCTAssertFalse(result.label.contains("连接可用"))
