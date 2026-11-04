@@ -31,12 +31,19 @@ jobs:
       - name: Core assertions
         run: |
           python3 Tests/static_checks.py
-          swiftc -swift-version 6 -strict-concurrency=complete Shared/Transcript.swift Tests/CoreTests.swift -o /tmp/core-tests
+          swiftc -parse-as-library -swift-version 6 -strict-concurrency=complete Shared/Transcript.swift Tests/CoreTests.swift -o /tmp/core-tests
           /tmp/core-tests
       - name: Build unsigned device app
         run: |
           set -o pipefail
           xcodebuild -project LiveSubs.xcodeproj -scheme LiveSubs -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tee build.log
+      - name: Embed personal-resigner metadata and verify bundle
+        run: |
+          APP=build/Build/Products/Release-iphoneos/LiveSubs.app
+          codesign --force --sign - --generate-entitlement-der --entitlements Broadcast/Broadcast.entitlements "$APP/PlugIns/Broadcast.appex"
+          codesign --force --sign - --generate-entitlement-der --entitlements App/LiveSubs.entitlements "$APP"
+          mkdir -p dist
+          python3 Tests/verify_bundle.py "$APP" --output dist/bundle-verification.json
       - name: Package IPA
         run: |
           mkdir -p dist/Payload
@@ -52,5 +59,6 @@ jobs:
           path: |
             dist/*.ipa
             dist/SHA256SUMS
+            dist/bundle-verification.json
             build.log
           retention-days: 14

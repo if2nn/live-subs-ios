@@ -31,18 +31,37 @@ enum SharedSigning {
   SecItemDelete(removal as CFDictionary)
   return (result as? [String: Any])?[kSecAttrAccessGroup as String] as? String
  }
+ // A container alone does not establish shared Keychain authorization.
+ static func canAccessKeychain(_ group: String) -> Bool {
+  let account = UUID().uuidString
+  let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+   kSecAttrService as String: "LiveSubs.SharedProbe", kSecAttrAccount as String: account,
+   kSecAttrAccessGroup as String: group, kSecValueData as String: Data(),
+   kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+  let status = SecItemAdd(q as CFDictionary, nil)
+  guard status == errSecSuccess else { return false }
+  var removal = q
+  removal.removeValue(forKey: kSecValueData as String)
+  removal.removeValue(forKey: kSecAttrAccessible as String)
+  SecItemDelete(removal as CFDictionary)
+  return true
+ }
  static let resolved: (group: String, root: URL)? = {
   let profile = profileEntitlements()
   let configured = Bundle.main.object(forInfoDictionaryKey: "SharedAppGroupCandidates") as? [String] ?? []
   let profiled = (profile["com.apple.security.application-groups"] as? [String] ?? [])
    .filter { $0 == baseGroup || $0.hasPrefix(baseGroup + ".") }
   let prefix = defaultAccessGroup()?.split(separator: ".").first.map(String.init)
-  var candidates = configured + profiled
+  let id = Bundle.main.bundleIdentifier ?? ""
+  let parent = id.hasSuffix(".broadcast") ? String(id.dropLast(".broadcast".count)) : id
+  // Also covers common team-suffixed IDs without relying on profile parsing.
+  var candidates = profiled + ["group." + parent] + configured
   if let prefix = prefix { candidates.append(baseGroup + "." + prefix) }
   candidates.append(baseGroup)
   var seen = Set<String>()
   for candidate in candidates where !candidate.contains("$(") && seen.insert(candidate).inserted {
-   if let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: candidate) {
+   if let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: candidate),
+      canAccessKeychain(candidate) {
     return (candidate, root)
    }
   }

@@ -85,3 +85,13 @@ enum SRT {
   "\(i)\n\(time(s)) --> \(time(max(e,s+500)))\n\(o)\n\(t)\n\n"
  }
 }
+
+ 
+// Pure retry policy shared with offline regression tests.
+enum SonioxRetry {
+ static let maximumRetries = 8
+ static func isFatal(_ code: Int) -> Bool { [400,401,402,403].contains(code) }
+ static func delay(attempt: Int, rateLimited: Bool) -> TimeInterval {
+  max(rateLimited ? 16 : 0, min(pow(2, Double(min(max(1, attempt), 5))), 30))
+ }
+}

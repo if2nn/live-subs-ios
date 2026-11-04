@@ -8,6 +8,15 @@ import Foundation
  static func main() throws {
   precondition(SRT.time(3661234) == "01:01:01,234")
   precondition(SRT.time(-1) == "00:00:00,000")
+  precondition([400,401,402,403].allSatisfy { SonioxRetry.isFatal($0) })
+  precondition([408,413,429,500,503].allSatisfy { !SonioxRetry.isFatal($0) })
+  precondition(SonioxRetry.maximumRetries == 8)
+  precondition(SonioxRetry.delay(attempt:1,rateLimited:false) == 2)
+  precondition(SonioxRetry.delay(attempt:5,rateLimited:false) == 30)
+  for attempt in 1...SonioxRetry.maximumRetries {
+   precondition(SonioxRetry.delay(attempt:attempt,rateLimited:true) >= 16)
+   precondition(SonioxRetry.delay(attempt:attempt,rateLimited:true) <= 30)
+  }
   var t = Transcript()
   precondition(t.ingest([token("Hel", "original", false)]).isEmpty)
   precondition(t.caption.original == "Hel")

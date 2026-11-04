@@ -27,7 +27,7 @@ import Observation
     self.message="已收到 Soniox 响应，连接可用";self.testing=false;self.tester?.stop();self.tester=nil
    }
   }
-  c.start(key)
+  c.start(key.trimmingCharacters(in:.whitespacesAndNewlines))
   Task{@MainActor in
    try? await Task.sleep(for:.seconds(1))
    c.send(Data(repeating:0,count:32000),voiced:false)

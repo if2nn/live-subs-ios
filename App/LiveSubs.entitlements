@@ -6,9 +6,5 @@
 	<array>
 		<string>group.com.aian.livesubs</string>
 	</array>
-	<key>keychain-access-groups</key>
-	<array>
-		<string>$(AppIdentifierPrefix)com.aian.livesubs.shared</string>
-	</array>
 </dict>
 </plist>
