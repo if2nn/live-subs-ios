@@ -36,6 +36,7 @@ final class Picture:NSObject,ObservableObject,AVPictureInPictureSampleBufferPlay
         let surface,surface.window != nil else{
    status="请在 App 前台、字幕预览可见时开启";Diagnostics.record("pip.surface.unavailable");return
   }
+  Diagnostics.record("pip.window.attached",code:surface.window == nil ? 0:1)
   surface.layoutIfNeeded()
   layer.frame=surface.bounds
   guard !layer.bounds.isEmpty else{
@@ -54,6 +55,9 @@ final class Picture:NSObject,ObservableObject,AVPictureInPictureSampleBufferPlay
    status="音频会话启动失败";Diagnostics.record(audioStage+".failure",code:(error as NSError).code);return
   }
   render(Store.read() ?? Caption())
+  Diagnostics.record("pip.layer.status",code:layer.status.rawValue)
+  Diagnostics.record("pip.layer.ready",code:layer.isReadyForMoreMediaData ? 1:0)
+  if let error=layer.error{Diagnostics.record("pip.layer.error",code:(error as NSError).code)}
   guard hasFrame,layer.status != .failed else{
    status="字幕画面尚未就绪，请稍后再点";Diagnostics.record("pip.frame.unavailable");return
   }
@@ -111,13 +115,23 @@ final class Picture:NSObject,ObservableObject,AVPictureInPictureSampleBufferPlay
    if layer.status == .failed{layer.flush();hasFrame=false;Diagnostics.record("pip.renderer.failed")}
    if layer.isReadyForMoreMediaData{
     let first = !hasFrame
-    if first{Diagnostics.record("pip.frame.first.before")}
+    if first{
+     Diagnostics.record("pip.frame.width",code:width)
+     Diagnostics.record("pip.frame.height",code:height)
+     Diagnostics.record("pip.frame.subtype",code:Int(CMFormatDescriptionGetMediaSubType(desc)))
+     let seconds=CMTimeGetSeconds(timing.presentationTimeStamp)
+     if seconds.isFinite,abs(seconds)<1_000_000_000{
+      Diagnostics.record("pip.frame.ptsMillis",code:Int(seconds*1000))
+     }
+     Diagnostics.record("pip.frame.first.before")
+    }
     layer.enqueue(sample)
     if first{
      if layer.status == .failed{
       Diagnostics.record("pip.frame.first.failure",code:(layer.error as NSError?)?.code ?? -1)
      }else{
       hasFrame=true;Diagnostics.record("pip.frame.first.success")
+      Diagnostics.record("pip.frame.enqueued.not.proven.presented")
      }
     }
    }

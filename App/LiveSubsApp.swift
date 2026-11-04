@@ -52,11 +52,13 @@ import Observation
   c.onMessage={[weak self] obj in
    let err=(obj["error_message"] as? String) ?? (obj["error"] as? String)
    let code=(obj["error_code"] as? Int).map(String.init)
+   let hasValidResponse = obj["tokens"] is [[String:Any]] || obj["finished"] as? Bool == true
    Task{@MainActor in
     guard let self,self.testing else{return}
     if err != nil || code != nil{
      self.message="Soniox 返回错误 "+(err ?? "code \(code!)");self.testing=false;self.tester?.stop();self.tester=nil;return
     }
+    guard hasValidResponse else{return}
     self.message="已收到 Soniox 响应，连接可用";self.testing=false;self.tester?.stop();self.tester=nil
    }
   }
@@ -103,10 +105,10 @@ struct Home:View{
      VideoSurface(picture:picture).frame(height:135).clipShape(RoundedRectangle(cornerRadius:20,style:.continuous))
      GlassCard{
       HStack{
-       Button("开启画中画"){picture.start()}.glassProminentButton()
+       Button("开启画中画"){picture.start()}.glassProminentButton().accessibilityIdentifier("pip.start")
        Button("关闭"){picture.stop()}.glassButton()
       }
-      Text(picture.status).font(.caption).foregroundStyle(.secondary)
+      Text(picture.status).accessibilityIdentifier("pip.status").font(.caption).foregroundStyle(.secondary)
       Text(m.previousDiagnostic).font(.caption2).textSelection(.enabled)
       HStack{
        Button("复制上次记录"){UIPasteboard.general.string=m.previousDiagnostic}.glassButton()
@@ -118,15 +120,20 @@ struct Home:View{
      }
      GlassCard{
       Text("自己的 Soniox").font(.title3.bold())
-      SecureField("API Key",text:$m.key).textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never).padding(12).background(.quaternary,in:RoundedRectangle(cornerRadius:12,style:.continuous))
+      SecureField("API Key",text:$m.key).accessibilityIdentifier("key.input").textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never).padding(12).background(.quaternary,in:RoundedRectangle(cornerRadius:12,style:.continuous))
+      #if DEBUG
+      if ProcessInfo.processInfo.arguments.contains("--ui-testing"){
+       Text("Stored length: \(Store.key().count)").accessibilityIdentifier("key.persistedLength")
+      }
+      #endif
       HStack{
        Button("保存到钥匙串"){
         m.saveKey()
-       }.glassButton()
-       Button(m.testing ? "测试中…" : "测试连接"){m.test()}.disabled(m.testing || m.key.isEmpty).glassButton()
+       }.glassButton().accessibilityIdentifier("key.save")
+       Button(m.testing ? "测试中…" : "测试连接"){m.test()}.disabled(m.testing || m.key.isEmpty).glassButton().accessibilityIdentifier("key.test")
       }
       Text("共享钥匙串不通时仍可保存和测试连接，但广播扩展读不到 Key，不能广播。").font(.caption).foregroundStyle(.secondary)
-      if !m.message.isEmpty{Text(m.message).font(.caption).foregroundStyle(.secondary)}
+      if !m.message.isEmpty{Text(m.message).accessibilityIdentifier("connection.status").font(.caption).foregroundStyle(.secondary)}
       DisclosureGroup("诊断信息",isExpanded:$m.diagOpen){
        Text(m.diagnostic).font(.system(.caption2,design:.monospaced)).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)
        Button("复制诊断"){UIPasteboard.general.string=m.diagnostic}.glassButton()

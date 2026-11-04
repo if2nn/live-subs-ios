@@ -56,3 +56,5 @@ https://developer.apple.com/documentation/security/ksecattraccessgroup
 https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps
 https://developer.apple.com/documentation/avkit/adopting-picture-in-picture-in-a-custom-player
 https://developer.apple.com/documentation/foundation/filehandle/synchronize()
+
+The simulator gate uses a newly created iOS 27 iPhone simulator, a hardcoded invalid test-only credential and unsigned-source/ad-hoc simulator hosting. It validates save/relaunch, bounded error handling and a PiP request without app termination. It records unsupported, controlled refusal or actual didStart separately; no result simulates SideStore authorization or cross-app recording. Device packaging depends on this job. Artifacts include xcresult screenshots, process logs and available app crash reports. PiP diagnostics include numeric layer status/readiness/error, host attachment and first-frame format/PTS. Successful enqueue is explicitly NOT proof of actual screen presentation.

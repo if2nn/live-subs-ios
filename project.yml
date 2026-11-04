@@ -32,3 +32,22 @@ targets:
         INFOPLIST_FILE: Broadcast/Info.plist
         CODE_SIGN_ENTITLEMENTS: Broadcast/Broadcast.entitlements
         APPLICATION_EXTENSION_API_ONLY: YES
+
+  LiveSubsUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests/UI]
+    dependencies:
+      - target: LiveSubs
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aian.livesubs.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: LiveSubs
+schemes:
+  LiveSubs:
+    build:
+      targets:
+        LiveSubs: all
+    test:
+      targets: [LiveSubsUITests]

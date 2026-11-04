@@ -13,7 +13,36 @@ on:
 permissions:
   contents: read
 jobs:
+  simulator_ui:
+    runs-on: xcode-27
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode 27.2 RC
+        run: sudo xcode-select -s /Applications/Xcode_27.2_Release_Candidate.app/Contents/Developer
+      - name: Generate project
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+      - name: iOS 27 simulator UI gate
+        run: |
+          set -o pipefail
+          mkdir -p simulator-artifacts
+          python3 Tests/run_simulator_tests.py 2>&1 | tee simulator-artifacts/runner.log
+      - name: Collect target app evidence
+        if: always()
+        run: python3 Tests/run_simulator_tests.py --collect
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LiveSubs-iOS27-simulator-evidence
+          path: simulator-artifacts/
+          if-no-files-found: error
+          retention-days: 14
   build:
+    needs: simulator_ui
     runs-on: xcode-27
     timeout-minutes: 20
     steps:
