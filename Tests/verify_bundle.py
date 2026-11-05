@@ -27,6 +27,10 @@ def verify(app):
     assert files and any(app.glob("AppIcon*.png")), "compiled icon resources missing"
     for prefix in files:
         assert any(app.glob(prefix + "*.png")), "declared icon resource missing"
+    # Six alternate icons (plan §12.5); names must match project.yml and the catalog.
+    alternates = info["CFBundleIcons"].get("CFBundleAlternateIcons", {})
+    expected_alt = {"AppIcon-Blue", "AppIcon-Green", "AppIcon-Pink", "AppIcon-Yellow", "AppIcon-Purple", "AppIcon-Teal"}
+    assert set(alternates) == expected_alt, f"alternate icons: {sorted(alternates)}"
     claims = {}
     for bundle in [extension, app]:
         assert (bundle / plistlib.loads((bundle / "Info.plist").read_bytes())["CFBundleExecutable"]).is_file()

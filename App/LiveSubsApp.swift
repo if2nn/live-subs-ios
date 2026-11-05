@@ -304,6 +304,8 @@ struct SettingsView: View {
      }.pickerStyle(.segmented).accessibilityIdentifier("settings.appearance")
     } header: { Text(S.sectionAppearance) } footer: { Text(S.appearanceFooter) }
 
+    AppIconSection()
+
     Section {
      Picker(S.sourceLanguage, selection: $store.settings.languages.source) {
       ForEach(Language.sources) { Text($0.name).tag($0.code) }

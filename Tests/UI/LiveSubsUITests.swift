@@ -322,7 +322,8 @@ final class LiveSubsUITests: XCTestCase {
   let mode = app.segmentedControls["interpret.mode"]
   XCTAssertTrue(mode.waitForExistence(timeout: 10), "mode switch")
   mode.buttons["对话"].tap()
-  XCTAssertTrue(app.buttons["interpret.flip"].firstMatch.exists, "flip toggle in conversation mode")
+  // A button-style Toggle is exposed as a Switch or a toggle button depending on the OS build.
+  XCTAssertTrue(app.descendants(matching: .any)["interpret.flip"].firstMatch.waitForExistence(timeout: 5), "flip toggle in conversation mode")
   app.buttons["interpret.start"].firstMatch.tap()
   let near = app.descendants(matching: .any)["interpret.near"].firstMatch
   let far = app.descendants(matching: .any)["interpret.far"].firstMatch
@@ -382,6 +383,43 @@ final class LiveSubsUITests: XCTestCase {
   XCTAssertTrue(app.staticTexts["早上好。"].waitForExistence(timeout: 10), "transcript record opens")
   capture("transcribe-record")
   back()
+ }
+
+ func testAppIconPicker() throws {
+  launch()
+  defer { capture("icon-final") }
+  openTab("设置")
+  let blue = app.buttons["settings.icon.Blue"].firstMatch
+  reveal(blue)
+  XCTAssertTrue(blue.waitForExistence(timeout: 10), "icon picker shown")
+  XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'settings.icon.'")).count, 7, "seven icons")
+  let orange = app.buttons["settings.icon.Orange"].firstMatch
+  XCTAssertTrue(orange.isSelected, "orange is current by default")
+  capture("icon-picker")
+  blue.tap()
+  dismissIconAlert()
+  XCTAssertTrue(wait(blue, timeout: 10) { $0.isSelected }, "blue selected after change")
+  XCTAssertFalse(app.staticTexts["图标切换失败"].exists, "no change error")
+  orange.tap()
+  dismissIconAlert()
+  XCTAssertTrue(wait(orange, timeout: 10) { $0.isSelected }, "back to orange")
+ }
+
+ /// iOS shows a system alert after setAlternateIconName; it lives in SpringBoard.
+ private func dismissIconAlert() {
+  let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+  let deadline = Date().addingTimeInterval(6)
+  var alert = app.alerts.firstMatch
+  while Date() < deadline {
+   if app.alerts.firstMatch.exists { alert = app.alerts.firstMatch; break }
+   if springboard.alerts.firstMatch.exists { alert = springboard.alerts.firstMatch; break }
+   Thread.sleep(forTimeInterval: 0.3)
+  }
+  if alert.exists {
+   capture("icon-system-alert")
+   let ok = alert.buttons.firstMatch
+   if ok.exists { ok.tap() }
+  }
  }
 
  func testManualReachableFromSettingsAndCaptions() throws {

@@ -147,6 +147,36 @@ check('ManualView()' in app and 'settings.manual' in app and 'live.manual' in ap
 for chapter in ['"setup"', '"captions"', '"interpret"', '"transcribe"', '"records"', '"privacy"', '"faq"']:
     check("id: " + chapter in manual, "manual chapter " + chapter)
 check("start.goToSettings" in app, "no-key prompt has a 去设置 action")
+# App icons (plan §12.8): 7 sets x light/dark/tinted at 1024, light opaque,
+# tinted grayscale, 7 previews, alternate list in project.yml matches.
+import json as _json, struct as _struct, zlib as _zlib
+def _png_info(path):
+    data = path.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", f"{path} not PNG"
+    w, h, depth, ctype = _struct.unpack(">IIBB", data[16:26])
+    return w, h, ctype   # ctype 2 RGB, 6 RGBA, 4 gray+alpha, 0 gray
+_assets = root / "App/Assets.xcassets"
+_names = ["AppIcon"] + [f"AppIcon-{c}" for c in ["Blue", "Green", "Pink", "Yellow", "Purple", "Teal"]]
+for _n in _names:
+    _d = _assets / f"{_n}.appiconset"
+    _c = _json.loads((_d / "Contents.json").read_text())
+    _looks = {tuple(a["value"] for a in img.get("appearances", [])): img["filename"] for img in _c["images"]}
+    check(set(_looks) == {(), ("dark",), ("tinted",)}, f"{_n} has light, dark and tinted")
+    for _look, _file in _looks.items():
+        _w, _h, _t = _png_info(_d / _file)
+        check((_w, _h) == (1024, 1024), f"{_n} {_file} is 1024")
+        if _look == (): check(_t == 2, f"{_n} light icon has no alpha")
+        if _look == ("tinted",): check(_t in (0, 4), f"{_n} tinted icon is grayscale")
+for _c in ["Orange", "Blue", "Green", "Pink", "Yellow", "Purple", "Teal"]:
+    _p = _assets / f"IconPreview-{_c}.imageset"
+    check((_p / "light.png").is_file() and (_p / "dark.png").is_file(), f"preview {_c}")
+    check(_png_info(_p / "light.png")[:2] == (180, 180), f"preview {_c} is 180")
+_yml = (root / "project.yml").read_text()
+check('ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "' + " ".join(_names[1:]) + '"' in _yml, "alternate icon list matches catalog")
+check((root / "Design/Icon/render_icons.py").is_file() and (root / "Design/Icon/colors.json").is_file() and (root / "Design/Icon/dual-icon.svg").is_file(), "icon sources in Design/Icon")
+_icons_src = (root / "App/AppIcons.swift").read_text()
+check("supportsAlternateIcons" in _icons_src and "setAlternateIconName" in _icons_src and "alternateIconName" in _icons_src, "icon picker uses the system as source of truth")
+
 print(f"{checks} static source/plist guards PASS")
 
 compiler = shutil.which("swiftc")

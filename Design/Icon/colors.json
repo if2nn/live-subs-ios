@@ -1,0 +1,13 @@
+{
+  "order": ["Orange", "Blue", "Green", "Pink", "Yellow", "Purple", "Teal"],
+  "primary": "Orange",
+  "colors": {
+    "Orange": {"label": "橙（默认）", "name": "橙色", "stops": ["#FED5C9", "#FEB29A", "#FE9977"]},
+    "Blue":   {"label": "蓝", "name": "蓝色", "stops": ["#D4E9FE", "#B9DBFD", "#9BCCFD"]},
+    "Green":  {"label": "绿", "name": "绿色", "stops": ["#DCF4E4", "#C5EED2", "#AFE9C1"]},
+    "Pink":   {"label": "粉", "name": "粉色", "stops": ["#FDDBE0", "#FDBFC9", "#FEACB9"]},
+    "Yellow": {"label": "黄", "name": "黄色", "stops": ["#FEE8B3", "#FED176", "#FEBD46"]},
+    "Purple": {"label": "紫", "name": "紫色", "stops": ["#E9D5FC", "#D7BAF9", "#C8A3F8"]},
+    "Teal":   {"label": "青", "name": "青色", "stops": ["#C9F2F1", "#AEE5E1", "#92DED6"]}
+  }
+}

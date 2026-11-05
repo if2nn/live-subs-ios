@@ -88,6 +88,20 @@ enum S {
  static let tooManyUploads = "最多同时上传 3 个"
  static let cancelled = "已取消"
 
+ // App 图标
+ static let sectionAppIcon = "App 图标"
+ static let iconDefaultSuffix = "（默认）"
+ static let iconOrange = "橙（默认）"
+ static let iconBlue = "蓝"
+ static let iconGreen = "绿"
+ static let iconPink = "粉"
+ static let iconYellow = "黄"
+ static let iconPurple = "紫"
+ static let iconTeal = "青"
+ static let iconSpoken = "App 图标，"
+ static let iconFailed = "图标切换失败"
+ static let iconColorSuffix = "色"
+
  // Records
  static let recordsEmpty = "暂无记录"
  static let inProgress = " · 进行中"
