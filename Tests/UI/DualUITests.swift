@@ -235,8 +235,13 @@ final class DualUITests: XCTestCase {
   push("settings.apiKey")
 
   // Invalid key test fails safely (network or not).
-  let test = app.buttons["key.test"]
+  let test = app.buttons["key.test"].firstMatch
+  // The push animation can still be running on a slow simulator; wait for the
+  // page before scrolling it (run 42094547148 tapped before it existed).
+  _ = test.waitForExistence(timeout: 10)
   reveal(test, up: false)
+  if !test.exists { reveal(test) }
+  XCTAssertTrue(test.waitForExistence(timeout: 10), "test connection button")
   test.tap()
   let result = app.staticTexts["connection.status"]
   // The status row can sit outside the lazily-built part of the list after the
