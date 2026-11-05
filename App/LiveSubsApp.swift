@@ -3,6 +3,13 @@ import ReplayKit
 import Observation
 import UIKit
 
+extension AppearanceMode {
+ /// `nil` lets the system decide; preview 6 default is `.system`.
+ var colorScheme: ColorScheme? {
+  switch self { case .system: nil; case .light: .light; case .dark: .dark }
+ }
+}
+
 @main struct LiveSubsApp: App {
  @State private var settings = SettingsStore()
  @State private var history = HistoryStore()
@@ -14,7 +21,6 @@ import UIKit
     .environment(settings)
     .environment(history)
     .environment(pip)
-    .preferredColorScheme(.dark)
   }
  }
 }
@@ -44,6 +50,7 @@ struct RootView: View {
    pip.settings = value.normalized()
   }
   .onChange(of: pip.phase) { _, phase in if phase != .running { history.refresh() } }
+  .preferredColorScheme(settings.settings.appearance.colorScheme)
  }
 }
 
@@ -289,6 +296,13 @@ struct SettingsView: View {
      #endif
     } header: { Text("Soniox Key") } footer: {
      Text("Key 只存在本机钥匙串，不写入字幕、日志或诊断。")
+    }
+
+    Section("外观") {
+     Picker("外观", selection: $store.settings.appearance) {
+      ForEach(AppearanceMode.allCases) { Text($0.title).tag($0) }
+     }.pickerStyle(.segmented).accessibilityIdentifier("settings.appearance")
+     Text("跟随系统时，字幕悬浮窗始终是黑底。").font(.caption).foregroundStyle(.secondary)
     }
 
     Section("语言") {

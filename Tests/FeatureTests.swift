@@ -294,6 +294,21 @@ import Foundation
   let migrated = AppSettings.decode(Data(preview4.utf8))
   check(migrated.pipShape == .classic && migrated.display == .translationOnly && migrated.style.fontSize == 36 && migrated.style.lines == 3, "preview 4 settings keep values, default to classic")
 
-  print("FeatureTests PASS (\(checks) checks: audio decode/resample, Soniox config, settings, history, captions, caption window geometry)")
+  // Preview 6: appearance follows the system by default; older settings migrate to it.
+  check(AppSettings().appearance == .system, "appearance defaults to system")
+  check(migrated.appearance == .system, "preview 4 settings default to system appearance")
+  let preview5 = #"{"languages":{"source":"en","target":"zh"},"display":"bilingual","pipShape":"strip","style":{"fontSize":30,"lines":2,"translationColor":"white","originalColor":"gray","position":"bottom","translationFirst":false,"backgroundOpacity":1}}"#
+  let migrated5 = AppSettings.decode(Data(preview5.utf8))
+  check(migrated5.appearance == .system && migrated5.pipShape == .strip && migrated5.languages.source == "en", "preview 5 settings keep values, default to system appearance")
+  for mode in AppearanceMode.allCases {
+   var a = AppSettings(); a.appearance = mode
+   check(AppSettings.decode(a.encoded()).appearance == mode, "appearance \(mode.rawValue) round-trips")
+  }
+  check(AppearanceMode.allCases.map(\.title) == ["跟随系统", "浅色", "深色"], "appearance titles")
+  var badAppearance = #"{"appearance":"sepia","pipShape":"strip"}"#
+  check(AppSettings.decode(Data(badAppearance.utf8)).appearance == .system && AppSettings.decode(Data(badAppearance.utf8)).pipShape == .strip, "unknown appearance falls back without resetting others")
+  badAppearance = ""
+
+  print("FeatureTests PASS (\(checks) checks: audio decode/resample, Soniox config, settings, appearance, history, captions, caption window geometry)")
  }
 }

@@ -86,6 +86,8 @@ check('录屏已停止' in pip and 'phaseChanged' in pip, "recording stopped pro
 check('Tab("历史"' in app and 'HistoryDetailView' in app and 'history.delete' in app, "history page")
 check('UIPasteboard.general.string = entry.plainText(mode)' in app and 'ShareLink(items:' in app, "copy and share")
 check('settings.source' in app and 'settings.target' in app and 'settings.display' in app, "language and display settings")
+check('.preferredColorScheme(.dark)' not in app, "appearance no longer forced dark")
+check('settings.appearance' in app and 'AppearanceMode' in app, "appearance control follows system/light/dark")
 for ident in ["settings.fontSize", "settings.lines", "settings.translationColor", "settings.opacity", "settings.order", "settings.position"]:
     check(ident in app, "style control " + ident)
 check('DiagnosticsView' in app, "diagnostics page kept")

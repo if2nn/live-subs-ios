@@ -32,6 +32,17 @@ enum DisplayMode: String, Codable, Sendable, CaseIterable, Identifiable {
  }
 }
 
+/// App appearance. `system` follows the device setting (preview 6 default);
+/// preview 5 and earlier forced dark. The SwiftUI ColorScheme mapping lives in
+/// the app target so this file stays Foundation-only for the extension.
+enum AppearanceMode: String, Codable, Sendable, CaseIterable, Identifiable {
+ case system, light, dark
+ var id: String { rawValue }
+ var title: String {
+  switch self { case .system: "跟随系统"; case .light: "浅色"; case .dark: "深色" }
+ }
+}
+
 /// Shape of the PiP caption window. `classic` is the preview 4 shape (height
 /// follows font and line count) and stays the default; `strip` is the optional
 /// wide, flat 3:1 subtitle bar added in preview 5.
@@ -109,16 +120,18 @@ struct AppSettings: Codable, Sendable, Equatable {
  var display: DisplayMode = .bilingual
  var style = SubtitleStyle()
  var pipShape: PiPShape = .classic
+ var appearance: AppearanceMode = .system
  init() {}
  // Missing keys (settings saved by preview 4 and earlier) keep their defaults
  // instead of resetting everything the user chose.
- private enum CodingKeys: String, CodingKey { case languages, display, style, pipShape }
+ private enum CodingKeys: String, CodingKey { case languages, display, style, pipShape, appearance }
  init(from decoder: Decoder) throws {
   let c = try decoder.container(keyedBy: CodingKeys.self)
   languages = (try? c.decodeIfPresent(LanguageSettings.self, forKey: .languages)) ?? LanguageSettings()
   display = (try? c.decodeIfPresent(DisplayMode.self, forKey: .display)) ?? .bilingual
   style = (try? c.decodeIfPresent(SubtitleStyle.self, forKey: .style)) ?? SubtitleStyle()
   pipShape = (try? c.decodeIfPresent(PiPShape.self, forKey: .pipShape)) ?? .classic
+  appearance = (try? c.decodeIfPresent(AppearanceMode.self, forKey: .appearance)) ?? .system
  }
  func normalized() -> AppSettings {
   var s = self

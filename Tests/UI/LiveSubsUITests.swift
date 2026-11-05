@@ -258,6 +258,26 @@ final class LiveSubsUITests: XCTestCase {
   XCTAssertTrue(app.staticTexts["还没有字幕记录"].waitForExistence(timeout: 10), "deleted entry not re-imported")
  }
 
+ func testAppearanceFollowsSettingNotForcedDark() throws {
+  launch()
+  defer { capture("appearance-final") }
+  openTab("设置")
+  let appearance = app.segmentedControls["settings.appearance"]
+  reveal(appearance)
+  XCTAssertTrue(appearance.waitForExistence(timeout: 10), "appearance control present")
+  XCTAssertTrue(appearance.buttons["跟随系统"].isSelected, "appearance defaults to follow system")
+  appearance.buttons["浅色"].tap()
+  XCTAssertTrue(wait(appearance.buttons["浅色"]) { $0.isSelected }, "appearance switched to light")
+  capture("appearance-light")
+  app.terminate()
+  launch()
+  openTab("设置")
+  let appearance2 = app.segmentedControls["settings.appearance"]
+  reveal(appearance2)
+  XCTAssertTrue(appearance2.buttons["浅色"].isSelected, "appearance survives restart")
+  XCTAssertEqual(app.state, .runningForeground)
+ }
+
  func testDiagnosticsPageShowsSigningAndCapture() throws {
   launch()
   defer { capture("diagnostics-final") }
