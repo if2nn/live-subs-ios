@@ -10,7 +10,7 @@ def verify(app):
     assert extension.is_dir(), "broadcast extension missing"
     info = plistlib.loads((app / "Info.plist").read_bytes())
     ext_info = plistlib.loads((extension / "Info.plist").read_bytes())
-    assert info["CFBundleVersion"] == ext_info["CFBundleVersion"] == "5"
+    assert info["CFBundleVersion"] == ext_info["CFBundleVersion"] == "6"
     assert info["MinimumOSVersion"] == ext_info["MinimumOSVersion"] == "27.0"
     assert info["DTSDKName"] == "iphoneos27.2"
     assert ext_info["CFBundleIdentifier"] == info["CFBundleIdentifier"] + ".broadcast"

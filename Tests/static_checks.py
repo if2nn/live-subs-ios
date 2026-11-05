@@ -42,7 +42,7 @@ for folder, filename in [("App", "Dual.entitlements"), ("Broadcast", "Broadcast.
     check(ent["com.apple.security.application-groups"] == ["group.com.aian.livesubs"], "declared app group")
     check("keychain-access-groups" not in ent, "no unresolved AppIdentifierPrefix")
     check(b"$(" not in plistlib.dumps(ent), "concrete entitlement metadata")
-    check(info["CFBundleVersion"] == "5", "preview 5 build version")
+    check(info["CFBundleVersion"] == "6", "preview 6 build version")
 check('audio' in plistlib.loads((root / 'App/Info.plist').read_bytes())['UIBackgroundModes'], "PiP background audio mode")
 
 # Audio path: explicit decoding, no AVAudioConverter guesswork.
