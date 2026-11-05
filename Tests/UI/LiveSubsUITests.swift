@@ -200,7 +200,9 @@ final class LiveSubsUITests: XCTestCase {
    // UISwitch is a nested Switch. Tap that one (known iOS 18+ behaviour).
    let knob = order.switches.firstMatch
    (knob.exists ? knob : order).tap()
-   if !wait(order, timeout: 4, { Self.isOn($0) }) {
+   // Up to three more attempts, each only after the value has had time to
+   // settle as still off, so a late update never gets flipped back.
+   for _ in 0..<3 where !wait(order, timeout: 4, { Self.isOn($0) }) {
     let frame = order.frame
     order.coordinate(withNormalizedOffset: .zero)
      .withOffset(CGVector(dx: frame.width - 30, dy: frame.height / 2)).tap()
@@ -312,6 +314,46 @@ final class LiveSubsUITests: XCTestCase {
   XCTAssertEqual(app.state, .runningForeground)
  }
 
+ func testInterpretConversationAndListenFixture() throws {
+  // Fixture tokens only: no microphone, no network, no Soniox request.
+  launch(["--ui-testing-interpret-fixture"])
+  defer { capture("interpret-final") }
+  openTab("同传")
+  let mode = app.segmentedControls["interpret.mode"]
+  XCTAssertTrue(mode.waitForExistence(timeout: 10), "mode switch")
+  mode.buttons["对话"].tap()
+  XCTAssertTrue(app.buttons["interpret.flip"].firstMatch.exists, "flip toggle in conversation mode")
+  app.buttons["interpret.start"].firstMatch.tap()
+  let near = app.descendants(matching: .any)["interpret.near"].firstMatch
+  let far = app.descendants(matching: .any)["interpret.far"].firstMatch
+  XCTAssertTrue(near.waitForExistence(timeout: 10) && far.exists, "two halves")
+  let zh = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "直走")).firstMatch
+  let en = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Go straight")).firstMatch
+  XCTAssertTrue(zh.waitForExistence(timeout: 10), "Chinese text shown")
+  XCTAssertTrue(en.exists, "English text shown")
+  XCTAssertFalse(mode.isEnabled, "mode locked while running")
+  capture("interpret-conversation")
+  app.buttons["interpret.stop"].firstMatch.tap()
+  XCTAssertTrue(app.buttons["interpret.start"].firstMatch.waitForExistence(timeout: 10), "stopped")
+  XCTAssertTrue(app.staticTexts["已存入记录"].waitForExistence(timeout: 5), "saved status")
+
+  mode.buttons["自己听"].tap()
+  app.buttons["interpret.start"].firstMatch.tap()
+  XCTAssertTrue(app.staticTexts["欢迎来到博物馆。"].waitForExistence(timeout: 10), "listen translation row")
+  XCTAssertTrue(app.staticTexts["Welcome to the museum."].exists, "listen original row")
+  capture("interpret-listen")
+  app.buttons["interpret.stop"].firstMatch.tap()
+  XCTAssertTrue(app.buttons["interpret.start"].firstMatch.waitForExistence(timeout: 10), "stopped again")
+
+  app.buttons["records.open"].firstMatch.tap()
+  let list = app.descendants(matching: .any)["records.list"].firstMatch
+  XCTAssertTrue(list.waitForExistence(timeout: 10) || app.cells.firstMatch.waitForExistence(timeout: 5), "records page")
+  XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "导览十点开始")).firstMatch.waitForExistence(timeout: 10)
+   || app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "直走")).firstMatch.exists, "interpret session saved as a record")
+  // Leave the mode at its default for other tests.
+  back(); openTab("同传"); mode.buttons["对话"].tap()
+ }
+
  func testManualReachableFromSettingsAndCaptions() throws {
   launch()
   defer { capture("manual-final") }
@@ -337,7 +379,7 @@ final class LiveSubsUITests: XCTestCase {
    // so the top API Key row may be off-screen; scroll up before asserting.
    let apiKey = app.buttons["settings.apiKey"].firstMatch
    XCTAssertTrue(app.buttons["settings.manual"].firstMatch.waitForExistence(timeout: 10) || apiKey.exists, "去设置 opens Settings")
-   reveal(apiKey)
+   reveal(apiKey, up: false)
    XCTAssertTrue(apiKey.waitForExistence(timeout: 10), "API Key row in Settings")
   }
  }

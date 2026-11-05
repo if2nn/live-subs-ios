@@ -43,6 +43,21 @@ struct ConversationRouter: Sendable {
     if text == "<end>" || text == "<fin>" { nearTokens.append(token); farTokens.append(token) }
    }
   }
-  return (near.ingest(nearTokens, arrivalMS: arrivalMS), far.ingest(farTokens, arrivalMS: arrivalMS))
+  return (ConversationRouter.feed(&near, nearTokens, arrivalMS: arrivalMS),
+          ConversationRouter.feed(&far, farTokens, arrivalMS: arrivalMS))
+ }
+
+ /// Feeds tokens and closes the pending translation cue as soon as a new
+ /// original utterance starts, so translations do not pile up until stop.
+ static func feed(_ t: inout Transcript, _ tokens: [[String: Any]], arrivalMS: Int) -> [Segment] {
+  var out: [Segment] = []
+  let startsOriginal = tokens.contains { token in
+   guard let text = token["text"] as? String, text != "<end>", text != "<fin>" else { return false }
+   return token["translation_status"] as? String != "translation"
+  }
+  if startsOriginal, !t.target.final.isEmpty, t.source.final.isEmpty, t.source.partial.isEmpty,
+     let cue = t.closeTranslation() { out.append(cue) }
+  out += t.ingest(tokens, arrivalMS: arrivalMS)
+  return out
  }
 }

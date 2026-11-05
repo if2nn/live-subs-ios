@@ -69,6 +69,9 @@ struct Transcript: Codable, Sendable {
   else { recentTarget = Transcript.rolling(recentTarget, current.final); lastTarget = current.final; target = remaining }
   return cue
  }
+ /// Closes the finished translation text as a cue (同声传译: a new utterance
+ /// starting means the previous translation is complete).
+ mutating func closeTranslation() -> Segment? { close(.translation) }
  mutating func finishFinals() -> [Segment] {
   [close(.original), close(.translation)].compactMap { $0 }
  }

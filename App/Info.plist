@@ -18,6 +18,8 @@
 	<string>5</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>同声传译需要麦克风，音频只发往你自己的 Soniox 账户。</string>
 	<key>SharedAppGroupCandidates</key>
 	<array>
 		<string>group.com.aian.livesubs</string>

@@ -126,6 +126,16 @@ final class HistoryStore {
   }
  }
 
+ /// Writes an app-side record (同声传译, 转录) and refreshes the list.
+ func save(_ entry: HistoryEntry) {
+  guard let dir = directory, HistoryEntry.safeID(entry.id), let data = entry.encoded() else { return }
+  do {
+   try data.write(to: dir.appendingPathComponent(entry.id + ".json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+  } catch { lastError = "记录保存失败"; return }
+  if let index = entries.firstIndex(where: { $0.id == entry.id }) { entries[index] = entry }
+  else if !entry.isEmpty { entries.insert(entry, at: 0) }
+ }
+
  func delete(_ entry: HistoryEntry) {
   var gone = deleted; gone.insert(entry.id); deleted = gone
   if let dir = directory { try? fm.removeItem(at: dir.appendingPathComponent(entry.id + ".json")) }

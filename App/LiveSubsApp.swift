@@ -14,6 +14,7 @@ extension AppearanceMode {
  @State private var settings = SettingsStore()
  @State private var history = HistoryStore()
  @State private var pip = CaptionPiP()
+ @State private var interpret = InterpretSession()
  init() { Diagnostics.install() }
  var body: some Scene {
   WindowGroup {
@@ -21,6 +22,7 @@ extension AppearanceMode {
     .environment(settings)
     .environment(history)
     .environment(pip)
+    .environment(interpret)
   }
  }
 }
@@ -59,6 +61,8 @@ struct RootView: View {
 struct LiveView: View {
  var openSettings: () -> Void = {}
  @Environment(CaptionPiP.self) private var pip
+ @Environment(InterpretSession.self) private var interpret
+ @State private var captionsBlocked = false
  @Environment(SettingsStore.self) private var settings
  var body: some View {
   NavigationStack {
@@ -85,13 +89,19 @@ struct LiveView: View {
      }
 
      SectionCard {
-      Button { pip.oneTapStart() } label: {
+      Button {
+       // 同声传译 needs .playAndRecord; captions keep PiP alive with .playback (plan §6).
+       if interpret.isRunning { captionsBlocked = true } else { captionsBlocked = false; pip.oneTapStart() }
+      } label: {
        Label(S.start, systemImage: "play.fill")
         .font(.title3.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 6)
       }
       .buttonStyle(.glassProminent).tint(.orange)
       .disabled(!settings.hasKey)
       .accessibilityIdentifier("start.oneTap")
+      if captionsBlocked && interpret.isRunning {
+       Text(S.captionsBusy).font(.callout).foregroundStyle(.orange).accessibilityIdentifier("start.interpretBusy")
+      }
       if !settings.hasKey {
        HStack {
         Text(S.noKey).font(.callout).foregroundStyle(.orange).accessibilityIdentifier("start.needsKey")
@@ -99,7 +109,7 @@ struct LiveView: View {
        }
       }
       HStack(spacing: 12) {
-       Button(S.pipOnly) { pip.arm(); pip.startPictureInPicture() }.buttonStyle(.glass).accessibilityIdentifier("pip.start")
+       Button(S.pipOnly) { guard !interpret.isRunning else { captionsBlocked = true; return }; pip.arm(); pip.startPictureInPicture() }.buttonStyle(.glass).accessibilityIdentifier("pip.start")
        Button(S.stop) { pip.stopAll() }.buttonStyle(.glass).accessibilityIdentifier("pip.stop")
        Spacer()
        BroadcastPicker(launcher: pip.launcher).frame(width: 44, height: 44).accessibilityIdentifier("broadcast.picker")
@@ -129,18 +139,7 @@ struct RecordsToolbarItem: ToolbarContent {
  }
 }
 
-// MARK: - Interpret / Transcribe (S4 / S5 fill these in)
-
-struct InterpretView: View {
- var body: some View {
-  NavigationStack {
-   ContentUnavailableView(S.titleInterpret, systemImage: "waveform.and.mic", description: Text(S.comingSoon))
-    .accessibilityIdentifier("interpret.placeholder")
-    .navigationTitle(S.titleInterpret).navigationBarTitleDisplayMode(.inline)
-    .toolbar { RecordsToolbarItem() }
-  }
- }
-}
+// 同声传译 is in Interpret.swift. 音频转录 (S5) fills TranscribeView.
 
 struct TranscribeView: View {
  var body: some View {

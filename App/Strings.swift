@@ -45,6 +45,23 @@ enum S {
  static let noKey = "未设置 API Key"
  static let goToSettings = "去设置"
 
+ // 同声传译
+ static let interpretMode = "模式"
+ static let me = "我"
+ static let opposite = "对面"
+ static let flipOpposite = "翻转对面"
+ static let interpretBusy = "字幕运行中"
+ static let captionsBusy = "同传运行中"
+ static let interpretStarting = "正在开始…"
+ static let interpretRunning = "正在同传"
+ static let interpretStopping = "正在保存…"
+ static let interpretSaved = "已存入记录"
+ static let interpretFailed = "同传已中断"
+ static let micDenied = "未允许麦克风"
+ static let micFailed = "麦克风启动失败"
+ static let keyInvalid = "API Key 无效"
+ static let noBalance = "余额不足"
+
  // Records
  static let recordsEmpty = "暂无记录"
  static let inProgress = " · 进行中"

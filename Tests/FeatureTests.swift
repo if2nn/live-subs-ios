@@ -359,6 +359,12 @@ import Foundation
   check(probe.near.caption.original.contains("谢谢") && probe.far.caption.translated.contains("Thanks"), "reply routes the other way")
   let flushed = probe.near.finishFinals() + probe.far.finishFinals()
   check(flushed.contains { $0.lane == .translation && $0.text == "Thanks" }, "far translation flushes as a segment")
+  var turns = Transcript()
+  _ = ConversationRouter.feed(&turns, [["text": "One.", "is_final": true, "translation_status": "original", "start_ms": 0, "end_ms": 500], ["text": "<end>", "is_final": true]], arrivalMS: 600)
+  _ = ConversationRouter.feed(&turns, [["text": "一。", "is_final": true, "translation_status": "translation"]], arrivalMS: 700)
+  let next = ConversationRouter.feed(&turns, [["text": "Two", "is_final": false, "translation_status": "original", "start_ms": 1000, "end_ms": 1200]], arrivalMS: 1300)
+  check(next.count == 1 && next[0].lane == .translation && next[0].text == "一。", "translation cue closes when the next utterance starts")
+  check(turns.target.final.isEmpty && turns.source.partial == "Two", "next utterance kept as live text")
   check(probe.side(of: ["text": "x", "language": "ja", "translation_status": "original"]) == .far, "out-of-pair original shown far")
   check(probe.side(of: ["text": "<end>", "is_final": true]) == nil, "control token goes to both halves")
 
