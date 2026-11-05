@@ -12,3 +12,5 @@
 - 2026-11-06: runs 42069754171 (5247869) and 42069939049 (c0fcd58) failed at "Select Xcode 27.2 RC":
   runner image xcode-27-arm64 20261104.0337 has Xcode 27.2 final at /Applications/Xcode_27.2.app and
   no RC. The workflow now selects Xcode_27.2.app, falling back to the RC path on older images.
+
+- 2026-11-06: run 42088133618 (c1ea0bd) failed before any build: `simctl bootstatus` hit its 240 s limit on the xcode-27 runner. Infrastructure, not code; re-triggered by this note (the PAT cannot call rerun, and pushes outside the path filter start no run).
