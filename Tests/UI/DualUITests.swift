@@ -170,11 +170,12 @@ final class DualUITests: XCTestCase {
   XCTAssertTrue(key.waitForExistence(timeout: 10))
   // The first tap can land during the push animation and not take focus
   // (run 42111927650); retry until the keyboard is up before typing.
+  // With a hardware keyboard attached the software keyboard never shows, so
+  // the field's own focus (hasKeyboardFocus) is the signal, not app.keyboards.
   for _ in 0..<3 {
    key.tap()
-   if app.keyboards.firstMatch.waitForExistence(timeout: 3) { break }
+   if wait(key, timeout: 3, { ($0.value(forKey: "hasKeyboardFocus") as? Bool) == true }) { break }
   }
-  XCTAssertTrue(app.keyboards.firstMatch.exists, "keyboard for the key field")
   key.typeText(placeholder)
   let save = app.buttons["key.save"]
   reveal(save)
