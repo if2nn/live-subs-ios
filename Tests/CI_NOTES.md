@@ -16,3 +16,4 @@
 - 2026-11-06: run 42088133618 (c1ea0bd) failed before any build: `simctl bootstatus` hit its 240 s limit on the xcode-27 runner. Infrastructure, not code; re-triggered by this note (the PAT cannot call rerun, and pushes outside the path filter start no run).
 - 2026-11-06: run 42107875188 (10e9088, iPhone 18 Pro / iOS 27.2): 11/12 passed; testInterpretConversationAndListenFixture failed tapping the 同传 tab with "Timed out while evaluating UI query" while xcodebuild logged DVTiPhoneSimulator warnings, before any interpret code ran. Same test passed in the three previous runs. Re-run.
 - Runner images differ: some ship iOS 27.1 as an iPhone Duo-only runtime and no 27.2. run_simulator_tests.py now picks the newest runtime that supports a standard iPhone, preferring iPhone 18 Pro.
+- 2026-11-06: run 42111927650 (6e9a843): 11/12; the key field took no focus before typeText. The test now waits for the keyboard and retries the tap.
