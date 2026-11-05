@@ -99,8 +99,14 @@ def test():
     # standard phone size: runs on iPhone Duo (466x678 pt) failed list-scrolling
     # UI tests that pass on iPhone 18 Pro (runs 42094547148, 42098792233).
     import re as _re
-    general = [r for r in runtimes if _re.search(r"\.iOS-27-\d+$", r["identifier"])] or runtimes
+    # Some runner images ship iOS 27.1 as a runtime that only supports iPhone Duo
+    # (run 42103504045); pick the newest runtime that runs a standard iPhone.
+    def standard(r):
+        return any(t.get("productFamily") == "iPhone" and "Duo" not in t["name"] for t in r.get("supportedDeviceTypes", []))
+    general = [r for r in runtimes if _re.search(r"\.iOS-27-\d+$", r["identifier"]) and standard(r)] \
+        or [r for r in runtimes if standard(r)] or runtimes
     runtime = sorted(general, key=lambda r: tuple(map(int, r["version"].split("."))))[-1]
+    print("simulator runtime:", runtime["identifier"], flush=True)
     supported = [t for t in runtime.get("supportedDeviceTypes", []) if t.get("productFamily") == "iPhone"]
     if not supported:
         supported = [d for d in simjson("devicetypes") if d.get("productFamily") == "iPhone" or d["name"].startswith("iPhone")]
