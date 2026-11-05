@@ -83,7 +83,12 @@ check('sendActions(for: .touchUpInside)' in pip, "public UIControl action on pic
 check('录屏已停止' in pip and 'phaseChanged' in pip, "recording stopped prompt")
 
 # Features.
-check('Tab("历史"' in app and 'HistoryDetailView' in app and 'history.delete' in app, "history page")
+check('RecordsView' in app and 'records.open' in app and 'settings.records' in app and 'HistoryDetailView' in app and 'history.delete' in app, "records reachable from pages and settings")
+for tab in ['Tab("字幕"', 'Tab("同传"', 'Tab("转录"', 'Tab("设置"']:
+    check(tab in app, "preview 6 tab " + tab)
+check('Tab("历史"' not in app and 'Tab("诊断"' not in app, "history and diagnostics moved into settings")
+for ident in ["settings.apiKey", "settings.styleLink", "settings.diagnostics"]:
+    check(ident in app, "settings subpage " + ident)
 check('UIPasteboard.general.string = entry.plainText(mode)' in app and 'ShareLink(items:' in app, "copy and share")
 check('settings.source' in app and 'settings.target' in app and 'settings.display' in app, "language and display settings")
 check('.preferredColorScheme(.dark)' not in app, "appearance no longer forced dark")

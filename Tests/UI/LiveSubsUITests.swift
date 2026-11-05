@@ -40,6 +40,18 @@ final class LiveSubsUITests: XCTestCase {
   XCTAssertTrue(button.waitForExistence(timeout: 15), "tab \(name)")
   button.tap()
  }
+ /// Opens a settings row that pushes a second-level page (preview 6 layout).
+ private func push(_ identifier: String) {
+  let link = app.buttons[identifier].firstMatch
+  reveal(link)
+  XCTAssertTrue(link.waitForExistence(timeout: 10), "link \(identifier)")
+  link.tap()
+ }
+ private func back() {
+  let button = app.navigationBars.buttons.element(boundBy: 0)
+  XCTAssertTrue(button.waitForExistence(timeout: 5), "back button")
+  button.tap()
+ }
  private func reveal(_ element: XCUIElement, up: Bool = true) {
   // Gentle swipes on the scroll container (not on whatever control sits at the
   // screen centre, e.g. a Slider) so lazily-built rows are never skipped.
@@ -149,6 +161,7 @@ final class LiveSubsUITests: XCTestCase {
   launch()
   defer { capture("settings-final") }
   openTab("设置")
+  push("settings.apiKey")
   let key = app.secureTextFields["key.input"]
   XCTAssertTrue(key.waitForExistence(timeout: 10))
   key.tap(); key.typeText(placeholder)
@@ -158,6 +171,7 @@ final class LiveSubsUITests: XCTestCase {
   let status = app.staticTexts["connection.status"]
   XCTAssertTrue(status.waitForExistence(timeout: 5))
   XCTAssertTrue(status.label.hasPrefix("已保存"), status.label)
+  back()
 
   // Display mode.
   let display = app.segmentedControls["settings.display"]
@@ -169,7 +183,8 @@ final class LiveSubsUITests: XCTestCase {
   let displayValue = app.staticTexts["settings.display.value"]
   reveal(displayValue)
   XCTAssertTrue(wait(displayValue) { $0.label.contains("仅译文") }, "display value: \(displayValue.label)")
-  // Style: order toggle and position.
+  // Style (设置 → 字幕样式): order toggle and position.
+  push("settings.styleLink")
   let orderQuery = NSPredicate(format: "identifier == 'settings.order' OR label == '译文在上'")
   let order = app.switches.matching(orderQuery).firstMatch
   reveal(order)
@@ -197,16 +212,21 @@ final class LiveSubsUITests: XCTestCase {
   app.terminate()
   launch()
   openTab("设置")
+  push("settings.apiKey")
   let length = app.staticTexts["key.persistedLength"]
   reveal(length)
   XCTAssertTrue(length.waitForExistence(timeout: 5))
   XCTAssertEqual(length.label, "Stored length: \(placeholder.count)", "credential survives restart")
+  back()
   let value = app.staticTexts["settings.display.value"]
   reveal(value)
   XCTAssertTrue(value.label.contains("仅译文"), "display mode survives restart: \(value.label)")
+  push("settings.styleLink")
   let order2 = app.switches.matching(orderQuery).firstMatch
   reveal(order2)
   XCTAssertTrue(Self.isOn(order2), "order toggle survives restart: \(String(describing: order2.value))")
+  back()
+  push("settings.apiKey")
 
   // Invalid key test fails safely (network or not).
   let test = app.buttons["key.test"]
@@ -230,7 +250,10 @@ final class LiveSubsUITests: XCTestCase {
  func testHistoryViewCopyDelete() throws {
   launch(["--ui-testing-seed-history"])
   defer { capture("history-final") }
-  openTab("历史")
+  openTab("字幕")
+  let records = app.buttons["records.open"].firstMatch
+  XCTAssertTrue(records.waitForExistence(timeout: 10), "记录 on the captions page")
+  records.tap()
   // A NavigationLink row is a button; avoid descendants(.any), which snapshots
   // the whole tree and times out on the iOS 27 simulator.
   let row = app.buttons.matching(NSPredicate(format: "identifier == 'history.row' OR label CONTAINS '→'")).firstMatch
@@ -254,8 +277,35 @@ final class LiveSubsUITests: XCTestCase {
   // Deleted entries stay deleted after relaunch (without re-seeding).
   app.terminate()
   launch()
-  openTab("历史")
+  openTab("设置")
+  push("settings.records")
   XCTAssertTrue(app.staticTexts["还没有字幕记录"].waitForExistence(timeout: 10), "deleted entry not re-imported")
+ }
+
+ func testTabsAndSettingsSubpages() throws {
+  launch()
+  defer { capture("tabs-final") }
+  for name in ["字幕", "同传", "转录", "设置"] {
+   XCTAssertTrue(app.buttons[name].firstMatch.waitForExistence(timeout: 15), "tab \(name)")
+  }
+  XCTAssertFalse(app.buttons["历史"].exists, "history tab removed")
+  XCTAssertFalse(app.buttons["诊断"].exists, "diagnostics tab removed")
+  openTab("同传")
+  XCTAssertTrue(app.buttons["records.open"].firstMatch.waitForExistence(timeout: 10), "记录 on interpret page")
+  capture("tab-interpret")
+  openTab("转录")
+  XCTAssertTrue(app.buttons["records.open"].firstMatch.waitForExistence(timeout: 10), "记录 on transcribe page")
+  capture("tab-transcribe")
+  openTab("设置")
+  for id in ["settings.apiKey", "settings.styleLink", "settings.records", "settings.diagnostics"] {
+   let link = app.buttons[id].firstMatch
+   reveal(link)
+   XCTAssertTrue(link.exists, "settings row \(id)")
+  }
+  let version = app.descendants(matching: .any)["settings.version"].firstMatch
+  reveal(version)
+  capture("settings-root")
+  XCTAssertEqual(app.state, .runningForeground)
  }
 
  func testAppearanceFollowsSettingNotForcedDark() throws {
@@ -281,7 +331,8 @@ final class LiveSubsUITests: XCTestCase {
  func testDiagnosticsPageShowsSigningAndCapture() throws {
   launch()
   defer { capture("diagnostics-final") }
-  openTab("诊断")
+  openTab("设置")
+  push("settings.diagnostics")
   let text = app.staticTexts["diag.text"]
   XCTAssertTrue(text.waitForExistence(timeout: 10))
   XCTAssertTrue(text.label.contains("Bundle ID"), "signing diagnostics visible")
