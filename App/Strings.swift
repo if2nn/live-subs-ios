@@ -62,6 +62,32 @@ enum S {
  static let keyInvalid = "API Key 无效"
  static let noBalance = "余额不足"
 
+ // 音频转录
+ static let pickFile = "选择音频文件"
+ static let picked = "已选"
+ static let output = "输出"
+ static let outputTranscribe = "仅转录"
+ static let outputTranslate = "转录并翻译"
+ static let translateTo = "译为"
+ static let language = "语言"
+ static let langAuto = "自动"
+ static let langSingle = "单一"
+ static let langMultiple = "多种"
+ static let strict = "仅识别所选语言"
+ static let startTranscribe = "开始转录"
+ static let jobs = "任务"
+ static let jobPending = "等待上传"
+ static let jobConverting = "转换中"
+ static func jobUploading(_ p: Int) -> String { "上传中 \(p)%" }
+ static let jobProcessing = "处理中"
+ static let jobDone = "完成"
+ static let jobFailed = "失败："
+ static let fileTooLong = "文件超过 300 分钟"
+ static let fileUnreadable = "无法读取文件"
+ static let formatUnsupported = "格式不支持"
+ static let tooManyUploads = "最多同时上传 3 个"
+ static let cancelled = "已取消"
+
  // Records
  static let recordsEmpty = "暂无记录"
  static let inProgress = " · 进行中"

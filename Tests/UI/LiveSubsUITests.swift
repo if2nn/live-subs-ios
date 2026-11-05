@@ -354,6 +354,36 @@ final class LiveSubsUITests: XCTestCase {
   back(); openTab("同传"); mode.buttons["对话"].tap()
  }
 
+ func testTranscribePageOptionsAndJobs() throws {
+  // Seeded jobs only: no file upload, no network, no Soniox request.
+  launch(["--ui-testing-seed-transcribe"])
+  defer { capture("transcribe-final") }
+  openTab("转录")
+  XCTAssertTrue(app.buttons["transcribe.pick"].firstMatch.waitForExistence(timeout: 10), "pick button")
+  XCTAssertFalse(app.buttons["transcribe.start"].firstMatch.isEnabled, "start disabled without a file")
+  let output = app.segmentedControls["transcribe.output"]
+  output.buttons["转录并翻译"].tap()
+  XCTAssertTrue(app.buttons["transcribe.target"].firstMatch.waitForExistence(timeout: 5) || app.staticTexts["译为"].exists, "target language shown for translate")
+  let lang = app.segmentedControls["transcribe.languageMode"]
+  lang.buttons["单一"].tap()
+  XCTAssertTrue(app.switches["transcribe.strict"].firstMatch.waitForExistence(timeout: 5), "strict toggle for a chosen language")
+  lang.buttons["自动"].tap()
+  XCTAssertTrue(waitGone(app.switches["transcribe.strict"].firstMatch), "no strict toggle for auto")
+  output.buttons["仅转录"].tap()
+  capture("transcribe-options")
+  let failed = app.descendants(matching: .any)["transcribe.job.UITEST-JOB-2"].firstMatch
+  reveal(failed)
+  XCTAssertTrue(failed.waitForExistence(timeout: 10), "failed job listed")
+  XCTAssertTrue(failed.label.contains("格式不支持"), "failure reason: \(failed.label)")
+  let done = app.buttons["transcribe.job.UITEST-JOB-1"].firstMatch
+  reveal(done)
+  XCTAssertTrue(done.waitForExistence(timeout: 10), "finished job links to its record")
+  done.tap()
+  XCTAssertTrue(app.staticTexts["早上好。"].waitForExistence(timeout: 10), "transcript record opens")
+  capture("transcribe-record")
+  back()
+ }
+
  func testManualReachableFromSettingsAndCaptions() throws {
   launch()
   defer { capture("manual-final") }

@@ -159,3 +159,10 @@ with tempfile.TemporaryDirectory() as tmp:
                                               "Shared/Transcript.swift", "Shared/Interpret.swift", "Tests/FeatureTests.swift"]],
                     "-o", exe], check=True)
     subprocess.run([exe], check=True)
+    # 音频转录 job state machine against a fake transport (no network).
+    exe2 = str(Path(tmp) / "transcribe-tests")
+    subprocess.run([compiler, "-parse-as-library", "-swift-version", "6", "-strict-concurrency=complete",
+                    *[str(root / f) for f in ["Shared/AudioPCM.swift", "Shared/Settings.swift", "Shared/History.swift", "Shared/CaptionLayout.swift",
+                                              "Shared/Transcript.swift", "Shared/Interpret.swift", "Shared/SonioxAsync.swift", "Tests/TranscribeTests.swift"]],
+                    "-o", exe2], check=True)
+    subprocess.run([exe2], check=True)

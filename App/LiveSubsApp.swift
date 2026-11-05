@@ -15,6 +15,7 @@ extension AppearanceMode {
  @State private var history = HistoryStore()
  @State private var pip = CaptionPiP()
  @State private var interpret = InterpretSession()
+ @State private var transcribe = TranscribeStore()
  init() { Diagnostics.install() }
  var body: some Scene {
   WindowGroup {
@@ -23,6 +24,7 @@ extension AppearanceMode {
     .environment(history)
     .environment(pip)
     .environment(interpret)
+    .environment(transcribe)
   }
  }
 }
@@ -139,18 +141,7 @@ struct RecordsToolbarItem: ToolbarContent {
  }
 }
 
-// 同声传译 is in Interpret.swift. 音频转录 (S5) fills TranscribeView.
-
-struct TranscribeView: View {
- var body: some View {
-  NavigationStack {
-   ContentUnavailableView(S.titleTranscribe, systemImage: "doc.text", description: Text(S.comingSoon))
-    .accessibilityIdentifier("transcribe.placeholder")
-    .navigationTitle(S.titleTranscribe).navigationBarTitleDisplayMode(.inline)
-    .toolbar { RecordsToolbarItem() }
-  }
- }
-}
+// 同声传译: Interpret.swift. 音频转录: Transcribe.swift.
 
 struct VideoSurface: UIViewRepresentable {
  let pip: CaptionPiP
