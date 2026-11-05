@@ -48,7 +48,9 @@ final class LiveSubsUITests: XCTestCase {
   link.tap()
  }
  private func back() {
-  let button = app.navigationBars.buttons.element(boundBy: 0)
+  // iOS 27 sims expose the system back button as identifier "BackButton"
+  // (not reliably under navigationBars).
+  let button = app.buttons["BackButton"].firstMatch
   XCTAssertTrue(button.waitForExistence(timeout: 5), "back button")
   button.tap()
  }

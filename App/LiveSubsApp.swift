@@ -218,7 +218,9 @@ struct RecordsView: View {
     } else {
      List {
       ForEach(history.entries) { entry in
-       NavigationLink(value: entry.id) {
+       // View-based link: RecordsView is itself pushed from several stacks, and a
+       // value link there found no navigationDestination on the iOS 27 simulator.
+       NavigationLink { HistoryDetailView(entry: entry) } label: {
         VStack(alignment: .leading, spacing: 4) {
          Text(entry.title).font(.headline)
          Text(Language.name(entry.source) + " → " + Language.name(entry.target) + " · " + HistoryEntry.clock(entry.durationMS) + (entry.ended == nil ? " · 进行中" : ""))
@@ -233,9 +235,6 @@ struct RecordsView: View {
     }
    }
    .navigationTitle("记录")
-   .navigationDestination(for: String.self) { id in
-    if let entry = history.entries.first(where: { $0.id == id }) { HistoryDetailView(entry: entry) }
-   }
    .refreshable { history.refresh() }
    .onAppear { history.refresh() }
  }
