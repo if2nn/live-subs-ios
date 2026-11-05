@@ -25,7 +25,7 @@ store = text("Shared/Core.swift")
 signing = text("Shared/Signing.swift")
 pip = text("App/CaptionPiP.swift")
 renderer = text("App/CaptionRenderer.swift")
-app = text("App/LiveSubsApp.swift")
+app = text("App/DualApp.swift")
 stores = text("App/Stores.swift")
 diagnostics = text("App/Diagnostics.swift")
 audio = text("Shared/AudioPCM.swift")
@@ -35,7 +35,7 @@ check('SWIFT_VERSION: "6.0"' in project and 'SWIFT_STRICT_CONCURRENCY: complete'
 check('INFOPLIST_FILE: App/Info.plist' in project and 'INFOPLIST_FILE: Broadcast/Info.plist' in project, "supplied plists")
 check('    info:' not in project, "XcodeGen must not regenerate supplied plists/entitlements")
 check('iOS: "27.0"' in project, "iOS 27 deployment target")
-for folder, filename in [("App", "LiveSubs.entitlements"), ("Broadcast", "Broadcast.entitlements")]:
+for folder, filename in [("App", "Dual.entitlements"), ("Broadcast", "Broadcast.entitlements")]:
     info = plistlib.loads((root / folder / "Info.plist").read_bytes())
     ent = plistlib.loads((root / folder / filename).read_bytes())
     check(info["SharedAppGroupCandidates"] == ["group.com.aian.livesubs"], "identical group candidates")
@@ -136,11 +136,11 @@ for lit in literals(strings):
     check(len(cjk.findall(lit)) <= 20, "page copy at most 20 CJK chars: " + lit)
     for word in ["你", "我们", "将会"]:
         check(word not in lit, "no " + word + " in page copy: " + lit)
-for name in ["App/LiveSubsApp.swift", "App/CaptionPiP.swift", "App/Stores.swift", "App/Diagnostics.swift"]:
+for name in ["App/DualApp.swift", "App/CaptionPiP.swift", "App/Stores.swift", "App/Diagnostics.swift"]:
     for lit in literals(text(name)):
         check(len(cjk.findall(lit)) <= 40, "no long explanation in " + name + ": " + lit)
 app_literals = [l for l in literals(app) if cjk.search(l)]
-check(app_literals == ["这是说话人刚才说的话。"], "LiveSubsApp.swift uses S.* for copy (only the preview sample is inline): " + repr(app_literals))
+check(app_literals == ["这是说话人刚才说的话。"], "DualApp.swift uses S.* for copy (only the preview sample is inline): " + repr(app_literals))
 for old in ["听见世界", "怎么用", "还没有字幕记录", "未确认尾句", "每种文字最多"]:
     check(old not in app + strings, "old copy removed: " + old)
 check('ManualView()' in app and 'settings.manual' in app and 'live.manual' in app, "manual reachable from settings and captions page")
@@ -176,6 +176,18 @@ check('ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "' + " ".join(_names[1:]) 
 check((root / "Design/Icon/render_icons.py").is_file() and (root / "Design/Icon/colors.json").is_file() and (root / "Design/Icon/dual-icon.svg").is_file(), "icon sources in Design/Icon")
 _icons_src = (root / "App/AppIcons.swift").read_text()
 check("supportsAlternateIcons" in _icons_src and "setAlternateIconName" in _icons_src and "alternateIconName" in _icons_src, "icon picker uses the system as source of truth")
+
+# S1.5 rename to Dual: names change, identity that holds data does not.
+_yml2 = (root / "project.yml").read_text()
+check(_yml2.startswith("name: Dual\n") and "  Dual:\n" in _yml2 and "DualUITests" in _yml2, "project, target and scheme are Dual")
+check("PRODUCT_BUNDLE_IDENTIFIER: com.aian.livesubs\n" in _yml2 and "PRODUCT_BUNDLE_IDENTIFIER: com.aian.livesubs.broadcast" in _yml2, "bundle ids unchanged")
+for _pl in ["App/Info.plist", "Broadcast/Info.plist"]:
+    check("<string>Dual</string>" in (root / _pl).read_text() and "双语字幕" not in (root / _pl).read_text(), f"{_pl} display name Dual")
+_core = (root / "Shared/Core.swift").read_text()
+check('"LiveSubs.Private" : "LiveSubs"' in _core, "keychain service names unchanged (Key survives upgrade)")
+check('"LiveSubs.settings.v1"' in (root / "App/Stores.swift").read_text() and '"LiveSubs.history.deleted"' in (root / "App/Stores.swift").read_text(), "UserDefaults keys unchanged")
+_wf = (root / ".github/workflows/live-subs-ios.yml").read_text()
+check("Dual-unsigned.ipa" in _wf and "LiveSubs-unsigned.ipa" not in _wf and "Dual.xcodeproj" in _wf, "workflow builds Dual-unsigned.ipa")
 
 print(f"{checks} static source/plist guards PASS")
 

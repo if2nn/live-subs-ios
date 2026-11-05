@@ -3,7 +3,7 @@ import XCTest
 /// Simulator UI gate. It checks the app's own UI and controlled failures only;
 /// it never claims ReplayKit capture, SideStore signing or device PiP.
 @MainActor
-final class LiveSubsUITests: XCTestCase {
+final class DualUITests: XCTestCase {
  private let placeholder = "uitest-invalid-placeholder-not-a-real-key"
  private var app: XCUIApplication!
 

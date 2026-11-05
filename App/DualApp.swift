@@ -10,7 +10,7 @@ extension AppearanceMode {
  }
 }
 
-@main struct LiveSubsApp: App {
+@main struct DualApp: App {
  @State private var settings = SettingsStore()
  @State private var history = HistoryStore()
  @State private var pip = CaptionPiP()

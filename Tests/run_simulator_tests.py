@@ -40,7 +40,7 @@ def collect():
     best(["xcrun", "simctl", "io", udid, "screenshot", "--display=1", OUT / "final-screen.png"], "screenshot.log")
     best(["xcrun", "simctl", "spawn", udid, "log", "show", "--style", "compact",
           "--start", state["started"], "--predicate",
-          'process == "LiveSubs" OR process == "Broadcast"'], "app-unified.log")
+          'process == "Dual" OR process == "Broadcast"'], "app-unified.log")
     try:
         result = run(["xcrun", "simctl", "get_app_container", udid, "com.aian.livesubs", "data"], check=False)
         container = Path(result.stdout.strip())
@@ -66,7 +66,7 @@ def collect():
         for file in base.rglob("*"):
             if file.suffix not in {".ips", ".crash"} or not file.is_file():
                 continue
-            if not any(file.name.startswith(prefix) for prefix in ("LiveSubs-", "LiveSubs_", "Broadcast-", "Broadcast_")):
+            if not any(file.name.startswith(prefix) for prefix in ("Dual-", "Dual_", "Broadcast-", "Broadcast_")):
                 continue
             if file.stat().st_mtime < state["epoch"]:
                 continue
@@ -105,7 +105,7 @@ def test():
             raise RuntimeError("No installed iPhone device type")
         type_id = candidates[-1]["identifier"]
     # Never reuse a simulator with pre-existing credentials.
-    udid = run(["xcrun", "simctl", "create", "LiveSubs-UI-Gate", type_id, runtime["identifier"]]).stdout.strip()
+    udid = run(["xcrun", "simctl", "create", "Dual-UI-Gate", type_id, runtime["identifier"]]).stdout.strip()
     state = {"udid": udid, "runtime": runtime, "deviceType": type_id,
              "epoch": epoch, "started": datetime.datetime.fromtimestamp(epoch).strftime("%Y-%m-%d %H:%M:%S")}
     STATE.write_text(json.dumps(state, indent=2))
@@ -115,7 +115,7 @@ def test():
     # bootstatus is the readiness gate; do not block tests on a redundant global device inventory.
     ent = OUT / "Simulator.entitlements"
     ent.write_bytes(plistlib.dumps({}))
-    result = run(["xcodebuild", "-project", "LiveSubs.xcodeproj", "-scheme", "LiveSubs",
+    result = run(["xcodebuild", "-project", "Dual.xcodeproj", "-scheme", "Dual",
                   "-configuration", "Debug", "-sdk", "iphonesimulator",
                   "-destination", f"platform=iOS Simulator,id={udid}",
                   "-derivedDataPath", "simulator-build", "-resultBundlePath", str(OUT / "UITests.xcresult"),

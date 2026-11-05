@@ -1,4 +1,4 @@
-name: Live Subs iOS
+name: Dual iOS
 on:
   workflow_dispatch:
   push:
@@ -44,7 +44,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: LiveSubs-iOS27-simulator-evidence
+          name: Dual-iOS27-simulator-evidence
           path: simulator-artifacts/
           if-no-files-found: error
           retention-days: 14
@@ -79,26 +79,26 @@ jobs:
       - name: Build unsigned device app
         run: |
           set -o pipefail
-          xcodebuild -project LiveSubs.xcodeproj -scheme LiveSubs -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tee build.log
+          xcodebuild -project Dual.xcodeproj -scheme Dual -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tee build.log
       - name: Embed personal-resigner metadata and verify bundle
         run: |
-          APP=build/Build/Products/Release-iphoneos/LiveSubs.app
+          APP=build/Build/Products/Release-iphoneos/Dual.app
           codesign --force --sign - --generate-entitlement-der --entitlements Broadcast/Broadcast.entitlements "$APP/PlugIns/Broadcast.appex"
-          codesign --force --sign - --generate-entitlement-der --entitlements App/LiveSubs.entitlements "$APP"
+          codesign --force --sign - --generate-entitlement-der --entitlements App/Dual.entitlements "$APP"
           mkdir -p dist
           python3 Tests/verify_bundle.py "$APP" --output dist/bundle-verification.json
       - name: Package IPA
         run: |
           mkdir -p dist/Payload
-          cp -R build/Build/Products/Release-iphoneos/LiveSubs.app dist/Payload/
-          test -d dist/Payload/LiveSubs.app/PlugIns/Broadcast.appex
+          cp -R build/Build/Products/Release-iphoneos/Dual.app dist/Payload/
+          test -d dist/Payload/Dual.app/PlugIns/Broadcast.appex
           cd dist
-          zip -qr LiveSubs-unsigned.ipa Payload
-          shasum -a 256 LiveSubs-unsigned.ipa > SHA256SUMS
+          zip -qr Dual-unsigned.ipa Payload
+          shasum -a 256 Dual-unsigned.ipa > SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: LiveSubs-iOS
+          name: Dual-iOS
           path: |
             dist/*.ipa
             dist/SHA256SUMS

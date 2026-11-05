@@ -38,7 +38,7 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
   CaptureIPC.keyRead(success: keyResult.success, status: keyResult.status)
   guard keyResult.success else {
    CaptureIPC.event(.fatal, code: 2, domain: "LiveSubs")
-   finishBroadcastWithError(NSError(domain: "LiveSubs", code: 2, userInfo: [NSLocalizedDescriptionKey: "请先在双语字幕 App 里保存 Soniox Key"]))
+   finishBroadcastWithError(NSError(domain: "LiveSubs", code: 2, userInfo: [NSLocalizedDescriptionKey: "请先在 Dual 里保存 Soniox Key"]))
    return
   }
   let settings = Store.sharedSettings()

@@ -146,10 +146,10 @@ final class CaptionPiP: NSObject, AVPictureInPictureControllerDelegate, AVPictur
    guard let self else { return }
    if self.launcher.open() {
     Diagnostics.record("broadcast.picker.opened")
-    if self.phase != .running { self.status = "在系统面板选「双语字幕」并点「开始直播」" }
+    if self.phase != .running { self.status = "在系统面板选「Dual」并点「开始直播」" }
    } else {
     Diagnostics.record("broadcast.picker.unavailable")
-    self.status = "请点下方录屏按钮，选「双语字幕」开始直播"
+    self.status = "请点下方录屏按钮，选「Dual」开始直播"
    }
   }
  }
@@ -302,9 +302,9 @@ final class CaptionPiP: NSObject, AVPictureInPictureControllerDelegate, AVPictur
 
  private var notice: String {
   switch phase {
-  case .stopped: return "录屏已停止 · 回到双语字幕点「开始」重开"
+  case .stopped: return "录屏已停止 · 回到 Dual 点「开始」重开"
   case .stale: return "录屏信号中断 · 回到 App 重新开始"
-  case .idle: return armed ? "等待系统录屏开始…" : "双语字幕 · 未在录屏"
+  case .idle: return armed ? "等待系统录屏开始…" : "Dual · 未在录屏"
   case .running:
    if caption.original.isEmpty && caption.translated.isEmpty { return captureStatus }
    return ""

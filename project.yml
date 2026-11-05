@@ -1,4 +1,4 @@
-name: LiveSubs
+name: Dual
 options:
   deploymentTarget:
     iOS: "27.0"
@@ -9,7 +9,7 @@ settings:
     CODE_SIGNING_ALLOWED: NO
     TARGETED_DEVICE_FAMILY: "1,2"
 targets:
-  LiveSubs:
+  Dual:
     type: application
     platform: iOS
     sources: [App, Shared]
@@ -20,7 +20,7 @@ targets:
         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Blue AppIcon-Green AppIcon-Pink AppIcon-Yellow AppIcon-Purple AppIcon-Teal"
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         INFOPLIST_FILE: App/Info.plist
-        CODE_SIGN_ENTITLEMENTS: App/LiveSubs.entitlements
+        CODE_SIGN_ENTITLEMENTS: App/Dual.entitlements
     dependencies:
       - target: Broadcast
         embed: true
@@ -35,21 +35,21 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Broadcast/Broadcast.entitlements
         APPLICATION_EXTENSION_API_ONLY: YES
 
-  LiveSubsUITests:
+  DualUITests:
     type: bundle.ui-testing
     platform: iOS
     sources: [Tests/UI]
     dependencies:
-      - target: LiveSubs
+      - target: Dual
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aian.livesubs.uitests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_TARGET_NAME: LiveSubs
+        TEST_TARGET_NAME: Dual
 schemes:
-  LiveSubs:
+  Dual:
     build:
       targets:
-        LiveSubs: all
+        Dual: all
     test:
-      targets: [LiveSubsUITests]
+      targets: [DualUITests]

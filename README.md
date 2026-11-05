@@ -1,4 +1,6 @@
-# Live Subs (双语字幕) for iOS
+# Dual for iOS
+
+Dual（原名 Live Subs / 双语字幕）：实时双语字幕、同声传译、音频转录。Bundle id、App Group、钥匙串与设置数据沿用旧名，升级安装不丢 Key 与记录。
 
 An experimental iOS 27+ app that shows live bilingual captions for audio playing in other apps. A ReplayKit broadcast upload extension captures **app audio only** (no microphone, no video frames). It streams that audio to **your own** Soniox account for real-time transcription and translation. The captions appear in a sample-buffer Picture-in-Picture window, Netflix-style: an opaque black strip with outlined text.
 
@@ -13,11 +15,11 @@ Built with Swift 6 (strict concurrency), SwiftUI, Observation (`@Observable`) an
    - the target language
    - the display mode: 双语 (bilingual), 仅译文 (translation only) or 仅原文 (original only)
    - the caption style: font size, translation and original colors, lines per lane, translation-above-original order, and position
-2. On **字幕** (Captions), tap **开始** (Start). Live Subs does three things:
+2. On **字幕** (Captions), tap **开始** (Start). Dual does three things:
    - It opens the caption PiP window if iOS allows it right away. It also arms auto-PiP, so captions float as soon as you leave the app.
    - It raises the system broadcast sheet.
    - It keeps a silent audio session running so the app can keep drawing captions in the background.
-3. In the system sheet, pick **双语字幕** and tap **开始直播** (Start Broadcast). iOS gives apps no public API to start a broadcast, so this one tap always belongs to you. That is the closest public-API version of the one-tap flow.
+3. In the system sheet, pick **Dual** and tap **开始直播** (Start Broadcast). iOS gives apps no public API to start a broadcast, so this one tap always belongs to you. That is the closest public-API version of the one-tap flow.
 4. Play your video. When the system recording stops, the PiP window and the app both say **录屏已停止** (recording stopped). Tap **重新开始** (start again) to reopen it.
 5. **历史** (History) keeps the full caption text of every session inside the app. You can view it as bilingual, original only or translation only. You can copy it, share it as .txt or .srt, or delete it. Swipe or use the trash button to delete. A deleted session is never re-imported.
 6. **诊断** (Diagnostics) shows signing and shared-container probes and extension heartbeat counters. It also shows the audio format, levels and sent bytes, and Soniox processed-audio milliseconds. Diagnostics can be copied or exported. They never contain the key, caption text or audio.
@@ -80,7 +82,7 @@ Now:
    - runs the static and behavior checks and the Swift test executables
    - builds the unsigned device app
    - ad-hoc signs the extension, then the app, to embed App Group entitlement metadata for the personal re-signer
-   - verifies the bundle and packages `LiveSubs-unsigned.ipa` with `SHA256SUMS`
+   - verifies the bundle and packages `Dual-unsigned.ipa` with `SHA256SUMS`
 
 "Unsigned" means no development or distribution identity or provisioning profile. Ad-hoc signatures do not authorize installation.
 
@@ -110,7 +112,7 @@ Each candidate is checked with real OS probes: `containerURL(forSecurityApplicat
 
 ## Design references and credits
 
-The preview 4 flow and caption window were designed after studying these projects. The ideas are credited here. **No source code was copied** from any of them; Live Subs' code is its own.
+The preview 4 flow and caption window were designed after studying these projects. The ideas are credited here. **No source code was copied** from any of them; Dual's code is its own.
 
 - [yuxino/Osu](https://github.com/yuxino/Osu) (MIT). An iPhone app that shows translated captions of other apps' audio in PiP via a ReplayKit broadcast. Ideas used:
   - lyric-style emphasis: the current sentence bright, earlier context dimmed
