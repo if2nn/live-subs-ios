@@ -94,16 +94,22 @@ def test():
                 r.get("version", "").split(".")[0] == "27" and ".iOS-" in r["identifier"]]
     if not runtimes:
         raise RuntimeError("No available iOS 27 runtime; release gate blocked")
-    runtime = sorted(runtimes, key=lambda r: tuple(map(int, r["version"].split("."))))[-1]
-    devices = simjson("devices").get(runtime["identifier"], [])
-    types = simjson("devicetypes")
-    available = [d for d in devices if d.get("isAvailable") and d.get("name", "").startswith("iPhone")]
-    type_id = available[0].get("deviceTypeIdentifier") if available else None
-    if not type_id:
-        candidates = [d for d in types if d.get("productFamily") == "iPhone" or d["name"].startswith("iPhone")]
-        if not candidates:
-            raise RuntimeError("No installed iPhone device type")
-        type_id = candidates[-1]["identifier"]
+    # Prefer the general iOS runtime over device-specific ones (e.g.
+    # "iOS-27-2-iPhone19-4", which only runs the small "iPhone Duo"), and a
+    # standard phone size: runs on iPhone Duo (466x678 pt) failed list-scrolling
+    # UI tests that pass on iPhone 18 Pro (runs 42094547148, 42098792233).
+    import re as _re
+    general = [r for r in runtimes if _re.search(r"\.iOS-27-\d+$", r["identifier"])] or runtimes
+    runtime = sorted(general, key=lambda r: tuple(map(int, r["version"].split("."))))[-1]
+    supported = [t for t in runtime.get("supportedDeviceTypes", []) if t.get("productFamily") == "iPhone"]
+    if not supported:
+        supported = [d for d in simjson("devicetypes") if d.get("productFamily") == "iPhone" or d["name"].startswith("iPhone")]
+    if not supported:
+        raise RuntimeError("No installed iPhone device type")
+    def rank(t):
+        name = t["name"]
+        return (name != "iPhone 18 Pro", "Duo" in name or "mini" in name or "SE" in name, "Pro" not in name, name)
+    type_id = sorted(supported, key=rank)[0]["identifier"]
     # Never reuse a simulator with pre-existing credentials.
     udid = run(["xcrun", "simctl", "create", "Dual-UI-Gate", type_id, runtime["identifier"]]).stdout.strip()
     state = {"udid": udid, "runtime": runtime, "deviceType": type_id,
