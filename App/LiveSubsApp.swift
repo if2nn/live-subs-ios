@@ -32,10 +32,10 @@ struct RootView: View {
  @State private var tab = "live"
  var body: some View {
   TabView(selection: $tab) {
-   Tab("字幕", systemImage: "captions.bubble", value: "live") { LiveView() }
-   Tab("同传", systemImage: "waveform.and.mic", value: "interpret") { InterpretView() }
-   Tab("转录", systemImage: "doc.text", value: "transcribe") { TranscribeView() }
-   Tab("设置", systemImage: "gearshape", value: "settings") { SettingsView() }
+   Tab(S.tabCaptions, systemImage: "captions.bubble", value: "live") { LiveView(openSettings: { tab = "settings" }) }
+   Tab(S.tabInterpret, systemImage: "waveform.and.mic", value: "interpret") { InterpretView() }
+   Tab(S.tabTranscribe, systemImage: "doc.text", value: "transcribe") { TranscribeView() }
+   Tab(S.tabSettings, systemImage: "gearshape", value: "settings") { SettingsView() }
   }
   .onAppear {
    pip.settings = settings.settings
@@ -57,16 +57,13 @@ struct RootView: View {
 // MARK: - Live
 
 struct LiveView: View {
+ var openSettings: () -> Void = {}
  @Environment(CaptionPiP.self) private var pip
  @Environment(SettingsStore.self) private var settings
  var body: some View {
   NavigationStack {
    ScrollView {
     VStack(alignment: .leading, spacing: 18) {
-     VStack(alignment: .leading, spacing: 6) {
-      Text("听见世界，看懂每一句").font(.largeTitle.weight(.bold))
-      Text("系统声音只送往你自己的 Soniox 账户。").foregroundStyle(.secondary)
-     }
      VideoSurface(pip: pip)
       .aspectRatio(CGFloat(CaptionCanvas.aspect(for: settings.settings)), contentMode: .fit)
       .frame(maxWidth: .infinity)
@@ -81,27 +78,29 @@ struct LiveView: View {
 
      if pip.phase == .stopped || pip.phase == .stale {
       SectionCard {
-       Label(pip.phase == .stopped ? "录屏已停止" : "录屏信号中断", systemImage: "exclamationmark.triangle.fill")
+       Label(pip.phase == .stopped ? S.captureStopped : S.captureStale, systemImage: "exclamationmark.triangle.fill")
         .font(.headline).foregroundStyle(.yellow)
-       Text("系统录屏结束后字幕不会再更新。点「重新开始」再次开启。").font(.callout)
-       Button("重新开始") { pip.oneTapStart() }.buttonStyle(.glassProminent).accessibilityIdentifier("start.again")
+       Button(S.restart) { pip.oneTapStart() }.buttonStyle(.glassProminent).accessibilityIdentifier("start.again")
       }.accessibilityIdentifier("broadcast.stopped.banner")
      }
 
      SectionCard {
       Button { pip.oneTapStart() } label: {
-       Label(pip.phase == .running ? "开启悬浮字幕" : "开始", systemImage: "play.fill")
+       Label(S.start, systemImage: "play.fill")
         .font(.title3.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 6)
       }
       .buttonStyle(.glassProminent).tint(.orange)
       .disabled(!settings.hasKey)
       .accessibilityIdentifier("start.oneTap")
       if !settings.hasKey {
-       Text("先到「设置」保存 Soniox Key。").font(.callout).foregroundStyle(.orange).accessibilityIdentifier("start.needsKey")
+       HStack {
+        Text(S.noKey).font(.callout).foregroundStyle(.orange).accessibilityIdentifier("start.needsKey")
+        Button(S.goToSettings) { openSettings() }.font(.callout).accessibilityIdentifier("start.goToSettings")
+       }
       }
       HStack(spacing: 12) {
-       Button("只开悬浮字幕") { pip.arm(); pip.startPictureInPicture() }.buttonStyle(.glass).accessibilityIdentifier("pip.start")
-       Button("关闭悬浮字幕") { pip.stopAll() }.buttonStyle(.glass).accessibilityIdentifier("pip.stop")
+       Button(S.pipOnly) { pip.arm(); pip.startPictureInPicture() }.buttonStyle(.glass).accessibilityIdentifier("pip.start")
+       Button(S.stop) { pip.stopAll() }.buttonStyle(.glass).accessibilityIdentifier("pip.stop")
        Spacer()
        BroadcastPicker(launcher: pip.launcher).frame(width: 44, height: 44).accessibilityIdentifier("broadcast.picker")
       }
@@ -109,16 +108,12 @@ struct LiveView: View {
       Text(pip.captureStatus).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("capture.status")
      }
 
-     SectionCard {
-      Text("怎么用").font(.headline)
-      Text("1. 点「开始」：悬浮字幕窗弹出，同时打开系统录屏面板。\n2. 在面板里选「双语字幕」，点「开始直播」。麦克风保持关闭。\n3. 回到视频 App 播放，字幕显示在悬浮窗里。\n4. 录屏停止后悬浮窗会提示，回到这里点「重新开始」。")
-       .font(.callout).foregroundStyle(.secondary)
-      Text("iOS 不允许 App 自己开始系统录屏，第 2 步必须由你在系统面板里点一下。受版权保护的视频，系统可能给录屏静音。画中画同一时间只能有一个，视频 App 自己的画中画会顶替字幕窗。")
-       .font(.footnote).foregroundStyle(.secondary)
-     }
+     NavigationLink { ManualView() } label: {
+      Label(S.manualLink, systemImage: "book")
+     }.accessibilityIdentifier("live.manual")
     }.padding(20)
    }
-   .navigationTitle("双语字幕").navigationBarTitleDisplayMode(.inline)
+   .navigationTitle(S.titleCaptions).navigationBarTitleDisplayMode(.inline)
    .toolbar { RecordsToolbarItem() }
   }
  }
@@ -128,7 +123,7 @@ struct LiveView: View {
 struct RecordsToolbarItem: ToolbarContent {
  var body: some ToolbarContent {
   ToolbarItem(placement: .topBarTrailing) {
-   NavigationLink { RecordsView() } label: { Text("记录") }
+   NavigationLink { RecordsView() } label: { Text(S.records) }
     .accessibilityIdentifier("records.open")
   }
  }
@@ -139,9 +134,9 @@ struct RecordsToolbarItem: ToolbarContent {
 struct InterpretView: View {
  var body: some View {
   NavigationStack {
-   ContentUnavailableView("同声传译", systemImage: "waveform.and.mic", description: Text("即将推出"))
+   ContentUnavailableView(S.titleInterpret, systemImage: "waveform.and.mic", description: Text(S.comingSoon))
     .accessibilityIdentifier("interpret.placeholder")
-    .navigationTitle("同声传译").navigationBarTitleDisplayMode(.inline)
+    .navigationTitle(S.titleInterpret).navigationBarTitleDisplayMode(.inline)
     .toolbar { RecordsToolbarItem() }
   }
  }
@@ -150,9 +145,9 @@ struct InterpretView: View {
 struct TranscribeView: View {
  var body: some View {
   NavigationStack {
-   ContentUnavailableView("音频转录", systemImage: "doc.text", description: Text("即将推出"))
+   ContentUnavailableView(S.titleTranscribe, systemImage: "doc.text", description: Text(S.comingSoon))
     .accessibilityIdentifier("transcribe.placeholder")
-    .navigationTitle("音频转录").navigationBarTitleDisplayMode(.inline)
+    .navigationTitle(S.titleTranscribe).navigationBarTitleDisplayMode(.inline)
     .toolbar { RecordsToolbarItem() }
   }
  }
@@ -212,8 +207,7 @@ struct RecordsView: View {
  var body: some View {
    Group {
     if history.entries.isEmpty {
-     ContentUnavailableView("还没有字幕记录", systemImage: "text.bubble",
-      description: Text("每次录屏的完整字幕会自动保存在这里。"))
+     ContentUnavailableView(S.recordsEmpty, systemImage: "text.bubble")
       .accessibilityIdentifier("history.empty")
     } else {
      List {
@@ -223,7 +217,7 @@ struct RecordsView: View {
        NavigationLink { HistoryDetailView(entry: entry) } label: {
         VStack(alignment: .leading, spacing: 4) {
          Text(entry.title).font(.headline)
-         Text(Language.name(entry.source) + " → " + Language.name(entry.target) + " · " + HistoryEntry.clock(entry.durationMS) + (entry.ended == nil ? " · 进行中" : ""))
+         Text(Language.name(entry.source) + " → " + Language.name(entry.target) + " · " + HistoryEntry.clock(entry.durationMS) + (entry.ended == nil ? S.inProgress : ""))
           .font(.caption).foregroundStyle(.secondary)
          if !entry.preview.isEmpty { Text(entry.preview).font(.callout).lineLimit(2) }
         }
@@ -234,7 +228,7 @@ struct RecordsView: View {
      }
     }
    }
-   .navigationTitle("记录")
+   .navigationTitle(S.titleRecords)
    .refreshable { history.refresh() }
    .onAppear { history.refresh() }
  }
@@ -251,7 +245,7 @@ struct HistoryDetailView: View {
  var body: some View {
   List {
    Section {
-    Picker("显示", selection: $mode) {
+    Picker(S.display, selection: $mode) {
      ForEach(DisplayMode.allCases) { Text($0.title).tag($0) }
     }.pickerStyle(.segmented).accessibilityIdentifier("history.mode")
    }
@@ -265,7 +259,7 @@ struct HistoryDetailView: View {
      .textSelection(.enabled)
     }
     if !entry.pendingOriginal.isEmpty || !entry.pendingTranslation.isEmpty {
-     Text("未确认尾句：" + [entry.pendingOriginal, entry.pendingTranslation].filter { !$0.isEmpty }.joined(separator: " / "))
+     Text(S.pending + [entry.pendingOriginal, entry.pendingTranslation].filter { !$0.isEmpty }.joined(separator: " / "))
       .font(.caption).foregroundStyle(.secondary)
     }
    }
@@ -276,24 +270,24 @@ struct HistoryDetailView: View {
    ToolbarItemGroup(placement: .topBarTrailing) {
     Button { UIPasteboard.general.string = entry.plainText(mode); copied = true } label: {
      Image(systemName: copied ? "checkmark" : "doc.on.doc")
-    }.accessibilityIdentifier("history.copy").accessibilityLabel("复制")
+    }.accessibilityIdentifier("history.copy").accessibilityLabel(S.copy)
     ShareLink(items: exports) { Image(systemName: "square.and.arrow.up") }
      .disabled(exports.isEmpty)
-     .accessibilityIdentifier("history.share").accessibilityLabel("分享")
+     .accessibilityIdentifier("history.share").accessibilityLabel(S.share)
     Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
-     .accessibilityIdentifier("history.delete").accessibilityLabel("删除记录")
+     .accessibilityIdentifier("history.delete").accessibilityLabel(S.deleteRecord)
    }
   }
   // Export files are written once per display mode, not on every body pass.
   .task(id: mode) {
    exports = [history.exportFile(entry, mode: mode, srt: false), history.exportFile(entry, mode: mode, srt: true)].compactMap { $0 }
   }
-  .confirmationDialog("删除这条字幕记录？", isPresented: $confirmDelete, titleVisibility: .visible) {
-   Button("删除", role: .destructive) { history.delete(entry); dismiss() }.accessibilityIdentifier("history.delete.confirm")
+  .confirmationDialog(S.deleteRecordConfirm, isPresented: $confirmDelete, titleVisibility: .visible) {
+   Button(S.delete, role: .destructive) { history.delete(entry); dismiss() }.accessibilityIdentifier("history.delete.confirm")
   }
   .overlay(alignment: .bottom) {
    if copied {
-    Text("已复制").font(.callout).padding(.horizontal, 14).padding(.vertical, 8)
+    Text(S.copied).font(.callout).padding(.horizontal, 14).padding(.vertical, 8)
      .background(.regularMaterial, in: Capsule()).padding(.bottom, 24).accessibilityIdentifier("history.copied")
    }
   }
@@ -308,52 +302,50 @@ struct SettingsView: View {
   @Bindable var store = store
   NavigationStack {
    Form {
-    Section("账户") {
+    Section(S.sectionAccount) {
      NavigationLink { APIKeyView() } label: {
-      LabeledContent("API Key", value: store.hasKey ? "已保存" : "未设置")
+      LabeledContent(S.titleAPIKey, value: store.hasKey ? S.keySaved : S.keyMissing)
      }.accessibilityIdentifier("settings.apiKey")
     }
 
-    Section("外观") {
-     Picker("外观", selection: $store.settings.appearance) {
+    Section {
+     Picker(S.appearance, selection: $store.settings.appearance) {
       ForEach(AppearanceMode.allCases) { Text($0.title).tag($0) }
      }.pickerStyle(.segmented).accessibilityIdentifier("settings.appearance")
-     Text("跟随系统时，字幕悬浮窗始终是黑底。").font(.caption).foregroundStyle(.secondary)
-    }
+    } header: { Text(S.sectionAppearance) } footer: { Text(S.appearanceFooter) }
 
-    Section("字幕") {
-     Picker("源语言", selection: $store.settings.languages.source) {
+    Section {
+     Picker(S.sourceLanguage, selection: $store.settings.languages.source) {
       ForEach(Language.sources) { Text($0.name).tag($0.code) }
      }.accessibilityIdentifier("settings.source")
-     Picker("目标语言", selection: $store.settings.languages.target) {
+     Picker(S.targetLanguage, selection: $store.settings.languages.target) {
       ForEach(Language.all) { Text($0.name).tag($0.code) }
      }.accessibilityIdentifier("settings.target")
-     Picker("模式", selection: $store.settings.display) {
+     Picker(S.mode, selection: $store.settings.display) {
       ForEach(DisplayMode.allCases) { Text($0.title).tag($0) }
      }.pickerStyle(.segmented).accessibilityIdentifier("settings.display")
-     Text("当前：" + store.settings.display.title).font(.caption).foregroundStyle(.secondary)
+     Text(S.current + store.settings.display.title).font(.caption).foregroundStyle(.secondary)
       .accessibilityIdentifier("settings.display.value")
-     Picker("悬浮窗形状", selection: $store.settings.pipShape) {
+     Picker(S.pipShape, selection: $store.settings.pipShape) {
       ForEach(PiPShape.allCases) { Text($0.title).tag($0) }
      }.pickerStyle(.segmented).accessibilityIdentifier("settings.pipShape")
-     Text(store.settings.pipShape == .strip ? "长条：宽而扁的字幕条，约两行双语" : "经典：高度随字号与行数变化（preview 4 形状）")
-      .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("settings.pipShape.value")
-     NavigationLink("字幕样式") { CaptionStyleView() }.accessibilityIdentifier("settings.styleLink")
+     NavigationLink(S.titleStyle) { CaptionStyleView() }.accessibilityIdentifier("settings.styleLink")
+    } header: { Text(S.sectionCaptions) } footer: { Text(S.languageFooter) }
+
+    Section(S.sectionData) {
+     NavigationLink(S.titleRecords) { RecordsView() }.accessibilityIdentifier("settings.records")
     }
 
-    Section("数据") {
-     NavigationLink("记录") { RecordsView() }.accessibilityIdentifier("settings.records")
+    Section(S.sectionHelp) {
+     NavigationLink(S.titleManual) { ManualView() }.accessibilityIdentifier("settings.manual")
+     NavigationLink(S.titleDiagnostics) { DiagnosticsView() }.accessibilityIdentifier("settings.diagnostics")
     }
 
-    Section("帮助") {
-     NavigationLink("诊断") { DiagnosticsView() }.accessibilityIdentifier("settings.diagnostics")
-    }
-
-    Section("关于") {
-     LabeledContent("版本", value: Self.version).accessibilityIdentifier("settings.version")
+    Section(S.sectionAbout) {
+     LabeledContent(S.version, value: Self.version).accessibilityIdentifier("settings.version")
     }
    }
-   .navigationTitle("设置")
+   .navigationTitle(S.titleSettings)
   }
  }
  static var version: String {
@@ -370,15 +362,15 @@ struct APIKeyView: View {
   @Bindable var store = store
   Form {
    Section {
-    SecureField(store.hasKey ? "已保存（输入新 Key 替换）" : "Soniox API Key", text: $store.keyDraft)
+    SecureField(store.hasKey ? S.keyPlaceholderSaved : S.keyPlaceholder, text: $store.keyDraft)
      .textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never)
      .focused($keyFocused).submitLabel(.done).onSubmit { keyFocused = false }
      .accessibilityIdentifier("key.input")
     HStack {
-     Button("保存 Key") { store.saveKey(); keyFocused = false }.buttonStyle(.glass)
+     Button(S.saveKey) { store.saveKey(); keyFocused = false }.buttonStyle(.glass)
       .disabled(store.keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       .accessibilityIdentifier("key.save")
-     Button(store.testing ? "测试中…" : "测试连接") { store.testKey() }.buttonStyle(.glass)
+     Button(store.testing ? S.testing : S.testConnection) { store.testKey() }.buttonStyle(.glass)
       .disabled(store.testing || (!store.hasKey && store.keyDraft.isEmpty))
       .accessibilityIdentifier("key.test")
     }
@@ -388,12 +380,10 @@ struct APIKeyView: View {
      Text("Stored length: \(store.storedKeyLength)").accessibilityIdentifier("key.persistedLength")
     }
     #endif
-   } header: { Text("Soniox Key") } footer: {
-    Text("Key 只存在本机钥匙串，不写入字幕、日志或诊断。")
-   }
+   } header: { Text(S.keyHeader) }
   }
   .scrollDismissesKeyboard(.interactively)
-  .navigationTitle("API Key")
+  .navigationTitle(S.titleAPIKey)
  }
 }
 
@@ -406,32 +396,32 @@ struct CaptionStyleView: View {
    Section {
     StylePreview(settings: store.settings).listRowInsets(EdgeInsets())
     VStack(alignment: .leading) {
-     Text("字号 \(Int(store.settings.style.fontSize))")
+     Text(S.fontSize(Int(store.settings.style.fontSize)))
      Slider(value: $store.settings.style.fontSize, in: SubtitleStyle.fontRange, step: 1)
       .accessibilityIdentifier("settings.fontSize")
     }
-    Stepper("每种文字最多 \(store.settings.style.lines) 行", value: $store.settings.style.lines, in: SubtitleStyle.lineRange)
+    Stepper(S.linesPerLane(store.settings.style.lines), value: $store.settings.style.lines, in: SubtitleStyle.lineRange)
      .accessibilityIdentifier("settings.lines")
-    Picker("译文颜色", selection: $store.settings.style.translationColor) {
+    Picker(S.translationColor, selection: $store.settings.style.translationColor) {
      ForEach(CaptionColor.allCases) { Text($0.title).tag($0) }
     }.accessibilityIdentifier("settings.translationColor")
-    Picker("原文颜色", selection: $store.settings.style.originalColor) {
+    Picker(S.originalColor, selection: $store.settings.style.originalColor) {
      ForEach(CaptionColor.allCases) { Text($0.title).tag($0) }
     }.accessibilityIdentifier("settings.originalColor")
     VStack(alignment: .leading) {
-     Text("背景不透明度 \(Int(store.settings.style.backgroundOpacity * 100))%")
+     Text(S.opacity(Int(store.settings.style.backgroundOpacity * 100)))
      Slider(value: $store.settings.style.backgroundOpacity, in: SubtitleStyle.opacityRange)
       .accessibilityIdentifier("settings.opacity")
-     Text("系统画中画窗口不能透明，悬浮字幕始终是黑底；这个设置用于 App 内预览的字幕底框。")
+     Text(S.previewOnly)
       .font(.caption2).foregroundStyle(.secondary)
     }
-    Toggle("译文在上", isOn: $store.settings.style.translationFirst).accessibilityIdentifier("settings.order")
-    Picker("位置", selection: $store.settings.style.position) {
+    Toggle(S.translationFirst, isOn: $store.settings.style.translationFirst).accessibilityIdentifier("settings.order")
+    Picker(S.position, selection: $store.settings.style.position) {
      ForEach(CaptionPosition.allCases) { Text($0.title).tag($0) }
     }.pickerStyle(.segmented).accessibilityIdentifier("settings.position")
    }
   }
-  .navigationTitle("字幕样式")
+  .navigationTitle(S.titleStyle)
  }
 }
 
@@ -476,20 +466,19 @@ struct DiagnosticsView: View {
    ScrollView {
     VStack(alignment: .leading, spacing: 14) {
      HStack {
-      Button("刷新") { reload() }.buttonStyle(.glass)
-      Button("复制") { UIPasteboard.general.string = text; message = "已复制" }.buttonStyle(.glass).accessibilityIdentifier("diag.copy")
-      Button("导出") {
-       if let url = Diagnostics.exportURL { share = url } else { message = "诊断日志暂时无法读取" }
+      Button(S.refresh) { reload() }.buttonStyle(.glass)
+      Button(S.copy) { UIPasteboard.general.string = text; message = S.copied }.buttonStyle(.glass).accessibilityIdentifier("diag.copy")
+      Button(S.export) {
+       if let url = Diagnostics.exportURL { share = url } else { message = S.diagUnavailable }
       }.buttonStyle(.glass).accessibilityIdentifier("diag.export")
       if let share { ShareLink(item: share) { Image(systemName: "square.and.arrow.up") } }
      }
      if !message.isEmpty { Text(message).font(.caption) }
      Text(text).font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
       .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("diag.text")
-     Text("诊断只含固定事件名、计数、音频格式和电平，不含 Key、字幕原文或音频。").font(.caption2).foregroundStyle(.secondary)
     }.padding(20)
    }
-   .navigationTitle("诊断")
+   .navigationTitle(S.titleDiagnostics)
    .onAppear { reload() }
  }
 }

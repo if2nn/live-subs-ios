@@ -84,9 +84,11 @@ check('录屏已停止' in pip and 'phaseChanged' in pip, "recording stopped pro
 
 # Features.
 check('RecordsView' in app and 'records.open' in app and 'settings.records' in app and 'HistoryDetailView' in app and 'history.delete' in app, "records reachable from pages and settings")
-for tab in ['Tab("字幕"', 'Tab("同传"', 'Tab("转录"', 'Tab("设置"']:
+for tab in ['Tab(S.tabCaptions', 'Tab(S.tabInterpret', 'Tab(S.tabTranscribe', 'Tab(S.tabSettings']:
     check(tab in app, "preview 6 tab " + tab)
-check('Tab("历史"' not in app and 'Tab("诊断"' not in app, "history and diagnostics moved into settings")
+for word, ident in [("字幕", "tabCaptions"), ("同传", "tabInterpret"), ("转录", "tabTranscribe"), ("设置", "tabSettings")]:
+    check(f'static let {ident} = "{word}"' in text("App/Strings.swift"), "tab label " + word)
+check('Tab("历史"' not in app and 'Tab("诊断"' not in app and 'Tab(' not in app.replace('Tab(S.', ''), "history and diagnostics moved into settings")
 for ident in ["settings.apiKey", "settings.styleLink", "settings.diagnostics"]:
     check(ident in app, "settings subpage " + ident)
 check('UIPasteboard.general.string = entry.plainText(mode)' in app and 'ShareLink(items:' in app, "copy and share")
@@ -123,6 +125,28 @@ for path in root.rglob("*"):
     data = path.read_bytes()
     check(not re.search(rb"(?:ghp_|github_pat_)[A-Za-z0-9_]{20,}", data), "no GitHub token pattern")
     check(not re.search(rb"/home/(?:kit|admin)/|192[.]168[.]|10[.]33[.]33[.]", data), "no internal paths/network")
+# Preview 6 copy rules (plan §3.6): page copy lives in App/Strings.swift, short and plain;
+# explanations live in App/Manual.swift.
+strings = text("App/Strings.swift")
+manual = text("App/Manual.swift")
+cjk = re.compile(r"[\u4e00-\u9fff]")
+def literals(src):
+    return re.findall(r'"([^"\n]*)"', src)
+for lit in literals(strings):
+    check(len(cjk.findall(lit)) <= 20, "page copy at most 20 CJK chars: " + lit)
+    for word in ["你", "我们", "将会"]:
+        check(word not in lit, "no " + word + " in page copy: " + lit)
+for name in ["App/LiveSubsApp.swift", "App/CaptionPiP.swift", "App/Stores.swift", "App/Diagnostics.swift"]:
+    for lit in literals(text(name)):
+        check(len(cjk.findall(lit)) <= 40, "no long explanation in " + name + ": " + lit)
+app_literals = [l for l in literals(app) if cjk.search(l)]
+check(app_literals == ["这是说话人刚才说的话。"], "LiveSubsApp.swift uses S.* for copy (only the preview sample is inline): " + repr(app_literals))
+for old in ["听见世界", "怎么用", "还没有字幕记录", "未确认尾句", "每种文字最多"]:
+    check(old not in app + strings, "old copy removed: " + old)
+check('ManualView()' in app and 'settings.manual' in app and 'live.manual' in app, "manual reachable from settings and captions page")
+for chapter in ['"setup"', '"captions"', '"interpret"', '"transcribe"', '"records"', '"privacy"', '"faq"']:
+    check("id: " + chapter in manual, "manual chapter " + chapter)
+check("start.goToSettings" in app, "no-key prompt has a 去设置 action")
 print(f"{checks} static source/plist guards PASS")
 
 compiler = shutil.which("swiftc")

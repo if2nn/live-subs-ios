@@ -277,13 +277,13 @@ final class LiveSubsUITests: XCTestCase {
   let confirm = app.buttons["删除"].firstMatch
   XCTAssertTrue(confirm.waitForExistence(timeout: 5))
   confirm.tap()
-  XCTAssertTrue(app.staticTexts["还没有字幕记录"].waitForExistence(timeout: 10), "entry deleted")
+  XCTAssertTrue(app.staticTexts["暂无记录"].waitForExistence(timeout: 10), "entry deleted")
   // Deleted entries stay deleted after relaunch (without re-seeding).
   app.terminate()
   launch()
   openTab("设置")
   push("settings.records")
-  XCTAssertTrue(app.staticTexts["还没有字幕记录"].waitForExistence(timeout: 10), "deleted entry not re-imported")
+  XCTAssertTrue(app.staticTexts["暂无记录"].waitForExistence(timeout: 10), "deleted entry not re-imported")
  }
 
  func testTabsAndSettingsSubpages() throws {
@@ -310,6 +310,31 @@ final class LiveSubsUITests: XCTestCase {
   reveal(version)
   capture("settings-root")
   XCTAssertEqual(app.state, .runningForeground)
+ }
+
+ func testManualReachableFromSettingsAndCaptions() throws {
+  launch()
+  defer { capture("manual-final") }
+  openTab("设置")
+  push("settings.manual")
+  let chapter = app.buttons["manual.chapter.captions"].firstMatch
+  XCTAssertTrue(chapter.waitForExistence(timeout: 10), "manual chapters listed")
+  chapter.tap()
+  XCTAssertTrue(app.staticTexts["开始步骤"].waitForExistence(timeout: 10), "captions chapter content")
+  capture("manual-captions")
+  back(); back()
+  openTab("字幕")
+  let link = app.buttons["live.manual"].firstMatch
+  reveal(link)
+  XCTAssertTrue(link.exists, "manual link on captions page")
+  // The old long how-to block is gone from the captions page.
+  XCTAssertFalse(app.staticTexts["怎么用"].exists, "how-to moved into the manual")
+  // Without a key, 去设置 jumps to Settings.
+  let go = app.buttons["start.goToSettings"]
+  if go.exists {
+   go.tap()
+   XCTAssertTrue(app.buttons["settings.apiKey"].firstMatch.waitForExistence(timeout: 10), "去设置 opens Settings")
+  }
  }
 
  func testAppearanceFollowsSettingNotForcedDark() throws {
