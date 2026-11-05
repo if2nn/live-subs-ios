@@ -156,6 +156,6 @@ with tempfile.TemporaryDirectory() as tmp:
     exe = str(Path(tmp) / "feature-tests")
     subprocess.run([compiler, "-parse-as-library", "-swift-version", "6", "-strict-concurrency=complete",
                     *[str(root / f) for f in ["Shared/AudioPCM.swift", "Shared/Settings.swift", "Shared/History.swift", "Shared/CaptionLayout.swift",
-                                              "Shared/Transcript.swift", "Tests/FeatureTests.swift"]],
+                                              "Shared/Transcript.swift", "Shared/Interpret.swift", "Tests/FeatureTests.swift"]],
                     "-o", exe], check=True)
     subprocess.run([exe], check=True)

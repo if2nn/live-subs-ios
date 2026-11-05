@@ -43,6 +43,70 @@ enum AppearanceMode: String, Codable, Sendable, CaseIterable, Identifiable {
  }
 }
 
+/// Soniox translation request kind. `none` = transcription only.
+enum TranslationKind: String, Codable, Sendable, CaseIterable { case none, oneWay, twoWay }
+
+/// 同声传译 layout (plan §13): face-to-face conversation (split, two-way,
+/// opposite half can be rotated 180°) or listening alone (one-way, interleaved).
+enum InterpretMode: String, Codable, Sendable, CaseIterable, Identifiable {
+ case conversation, listen
+ var id: String { rawValue }
+ var title: String {
+  switch self { case .conversation: "对话"; case .listen: "自己听" }
+ }
+}
+
+/// 同声传译 defaults. `languageA` is the near (my) side in conversation mode.
+struct InterpretSettings: Codable, Sendable, Equatable {
+ var mode: InterpretMode = .conversation
+ var languageA: String = "zh"
+ var languageB: String = "en"
+ var listenSource: String = "auto"
+ var listenTarget: String = "zh"
+ var display: DisplayMode = .bilingual
+ /// Opposite half rotated 180° so the other person reads it upright.
+ var flipOpposite: Bool = true
+ init() {}
+ private enum CodingKeys: String, CodingKey { case mode, languageA, languageB, listenSource, listenTarget, display, flipOpposite }
+ init(from decoder: Decoder) throws {
+  let c = try decoder.container(keyedBy: CodingKeys.self)
+  let d = InterpretSettings()
+  mode = (try? c.decodeIfPresent(InterpretMode.self, forKey: .mode)) ?? d.mode
+  languageA = (try? c.decodeIfPresent(String.self, forKey: .languageA)) ?? d.languageA
+  languageB = (try? c.decodeIfPresent(String.self, forKey: .languageB)) ?? d.languageB
+  listenSource = (try? c.decodeIfPresent(String.self, forKey: .listenSource)) ?? d.listenSource
+  listenTarget = (try? c.decodeIfPresent(String.self, forKey: .listenTarget)) ?? d.listenTarget
+  display = (try? c.decodeIfPresent(DisplayMode.self, forKey: .display)) ?? d.display
+  flipOpposite = (try? c.decodeIfPresent(Bool.self, forKey: .flipOpposite)) ?? d.flipOpposite
+ }
+ func normalized() -> InterpretSettings {
+  var s = self
+  let all = Set(Language.all.map(\.code))
+  if !all.contains(languageA) { s.languageA = "zh" }
+  if !all.contains(languageB) { s.languageB = "en" }
+  if s.languageA == s.languageB { s.languageB = s.languageA == "en" ? "zh" : "en" }
+  if !Language.sources.contains(where: { $0.code == listenSource }) { s.listenSource = "auto" }
+  if !all.contains(listenTarget) { s.listenTarget = "zh" }
+  return s
+ }
+ /// The translation the session requests for its mode.
+ var translation: SonioxConfig.Translation {
+  let s = normalized()
+  switch s.mode {
+  case .conversation: return .twoWay(a: s.languageA, b: s.languageB)
+  case .listen:
+   return (s.listenSource != "auto" && s.listenSource == s.listenTarget) ? .none : .oneWay(target: s.listenTarget)
+  }
+ }
+ var hints: [String] {
+  let s = normalized()
+  switch s.mode {
+  case .conversation: return [s.languageA, s.languageB]
+  case .listen: return s.listenSource == "auto" ? SonioxConfig.unique([s.listenTarget, "en", "zh", "ja"]) : [s.listenSource]
+  }
+ }
+}
+
 /// Shape of the PiP caption window. `classic` is the preview 4 shape (height
 /// follows font and line count) and stays the default; `strip` is the optional
 /// wide, flat 3:1 subtitle bar added in preview 5.
@@ -121,10 +185,11 @@ struct AppSettings: Codable, Sendable, Equatable {
  var style = SubtitleStyle()
  var pipShape: PiPShape = .classic
  var appearance: AppearanceMode = .system
+ var interpret = InterpretSettings()
  init() {}
  // Missing keys (settings saved by preview 4 and earlier) keep their defaults
  // instead of resetting everything the user chose.
- private enum CodingKeys: String, CodingKey { case languages, display, style, pipShape, appearance }
+ private enum CodingKeys: String, CodingKey { case languages, display, style, pipShape, appearance, interpret }
  init(from decoder: Decoder) throws {
   let c = try decoder.container(keyedBy: CodingKeys.self)
   languages = (try? c.decodeIfPresent(LanguageSettings.self, forKey: .languages)) ?? LanguageSettings()
@@ -132,10 +197,11 @@ struct AppSettings: Codable, Sendable, Equatable {
   style = (try? c.decodeIfPresent(SubtitleStyle.self, forKey: .style)) ?? SubtitleStyle()
   pipShape = (try? c.decodeIfPresent(PiPShape.self, forKey: .pipShape)) ?? .classic
   appearance = (try? c.decodeIfPresent(AppearanceMode.self, forKey: .appearance)) ?? .system
+  interpret = (try? c.decodeIfPresent(InterpretSettings.self, forKey: .interpret)) ?? InterpretSettings()
  }
  func normalized() -> AppSettings {
   var s = self
-  s.languages = languages.normalized(); s.style = style.normalized()
+  s.languages = languages.normalized(); s.style = style.normalized(); s.interpret = interpret.normalized()
   return s
  }
  static func decode(_ data: Data?) -> AppSettings {
@@ -150,6 +216,43 @@ struct AppSettings: Codable, Sendable, Equatable {
 /// Authorization header). Returned as JSON text so it is Sendable.
 enum SonioxConfig {
  static let model = "stt-rt-v6"
+ /// Translation part of a start request (shared by captions and 同声传译).
+ enum Translation: Equatable, Sendable {
+  case none, oneWay(target: String), twoWay(a: String, b: String)
+  var kind: TranslationKind {
+   switch self { case .none: .none; case .oneWay: .oneWay; case .twoWay: .twoWay }
+  }
+  var dictionary: [String: Any]? {
+   switch self {
+   case .none: return nil
+   case .oneWay(let target): return ["type": "one_way", "target_language": target]
+   case .twoWay(let a, let b): return ["type": "two_way", "language_a": a, "language_b": b]
+   }
+  }
+ }
+ static func unique(_ values: [String]) -> [String] {
+  var seen = Set<String>(); return values.filter { seen.insert($0).inserted }
+ }
+ /// General start request: microphone (同声传译) and ReplayKit (字幕) send the
+ /// same 16 kHz mono s16le audio, so only hints and translation differ.
+ static func dictionary(hints: [String], translation: Translation) -> [String: Any] {
+  var config: [String: Any] = [
+   "model": model,
+   "audio_format": "s16le",
+   "sample_rate": 16_000,
+   "num_channels": 1,
+   "language_hints": unique(hints),
+   "enable_language_identification": true,
+   "enable_endpoint_detection": true
+  ]
+  if let t = translation.dictionary { config["translation"] = t }
+  return config
+ }
+ static func json(hints: [String], translation: Translation) -> String {
+  let data = (try? JSONSerialization.data(withJSONObject: dictionary(hints: hints, translation: translation), options: [.sortedKeys])) ?? Data()
+  return String(decoding: data, as: UTF8.self)
+ }
+ static func json(_ interpret: InterpretSettings) -> String { json(hints: interpret.hints, translation: interpret.translation) }
  static func dictionary(_ languages: LanguageSettings) -> [String: Any] {
   let l = languages.normalized()
   var hints: [String]

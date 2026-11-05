@@ -136,7 +136,8 @@ final class HistoryStore {
 
  /// Writes an export file into the app's temporary directory for sharing.
  func exportFile(_ entry: HistoryEntry, mode: DisplayMode, srt: Bool) -> URL? {
-  let name = "双语字幕-" + entry.title.replacingOccurrences(of: ":", with: "-").replacingOccurrences(of: " ", with: "_") + (srt ? ".srt" : ".txt")
+  // 字幕-11月5日_10-02.txt, 同传-…, 转录-<file name>.srt (plan §5.2)
+  let name = entry.exportBaseName + (srt ? ".srt" : ".txt")
   let url = fm.temporaryDirectory.appendingPathComponent(name)
   do {
    try (srt ? entry.srt(mode) : entry.plainText(mode)).write(to: url, atomically: true, encoding: .utf8)

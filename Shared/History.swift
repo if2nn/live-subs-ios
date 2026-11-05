@@ -4,6 +4,17 @@ import Foundation
 /// and imported into the app's own History store. Contains caption text only:
 /// never the API key, audio, or raw server responses.
 struct HistoryEntry: Codable, Sendable, Identifiable, Equatable {
+ /// What produced the record (schema 2). Schema 1 records have no kind and
+ /// decode as `.caption`; files on disk are never rewritten for migration.
+ enum Kind: String, Codable, Sendable, CaseIterable { case caption, interpret, file }
+ /// Options the session ran with (schema 2, optional).
+ struct Options: Codable, Sendable, Equatable {
+  var translation: TranslationKind = .oneWay
+  var interpretMode: InterpretMode? = nil
+  var languageA: String? = nil
+  var languageB: String? = nil
+  var hints: [String] = []
+ }
  struct Line: Codable, Sendable, Equatable {
   var lane: Segment.Lane
   var text: String
@@ -11,7 +22,11 @@ struct HistoryEntry: Codable, Sendable, Identifiable, Equatable {
   var endMS: Int
   var approximate: Bool
  }
- var schema = 1
+ static let currentSchema = 2
+ var schema = HistoryEntry.currentSchema
+ var kind: Kind = .caption
+ var fileName: String? = nil
+ var options: Options? = nil
  var id: String
  var started: Date
  var updated: Date
@@ -25,7 +40,47 @@ struct HistoryEntry: Codable, Sendable, Identifiable, Equatable {
 
  static let maximumLines = 20_000
 
+ init(id: String, started: Date, updated: Date, source: String, target: String, kind: Kind = .caption,
+      fileName: String? = nil, options: Options? = nil) {
+  self.id = id; self.started = started; self.updated = updated
+  self.source = source; self.target = target
+  self.kind = kind; self.fileName = fileName; self.options = options
+ }
+ private enum CodingKeys: String, CodingKey {
+  case schema, kind, fileName, options, id, started, updated, ended, source, target, lines, pendingOriginal, pendingTranslation
+ }
+ init(from decoder: Decoder) throws {
+  let c = try decoder.container(keyedBy: CodingKeys.self)
+  schema = try c.decodeIfPresent(Int.self, forKey: .schema) ?? 1
+  kind = (try? c.decodeIfPresent(Kind.self, forKey: .kind)) ?? .caption
+  fileName = try? c.decodeIfPresent(String.self, forKey: .fileName)
+  options = try? c.decodeIfPresent(Options.self, forKey: .options)
+  id = try c.decode(String.self, forKey: .id)
+  started = try c.decode(Date.self, forKey: .started)
+  updated = try c.decode(Date.self, forKey: .updated)
+  ended = try c.decodeIfPresent(Date.self, forKey: .ended)
+  source = try c.decode(String.self, forKey: .source)
+  target = try c.decode(String.self, forKey: .target)
+  lines = try c.decodeIfPresent([Line].self, forKey: .lines) ?? []
+  pendingOriginal = try c.decodeIfPresent(String.self, forKey: .pendingOriginal) ?? ""
+  pendingTranslation = try c.decodeIfPresent(String.self, forKey: .pendingTranslation) ?? ""
+ }
+
+ /// Export base name: 字幕-11月5日_10-02, 同传-…, 转录-<file name without extension>.
+ var exportBaseName: String {
+  let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M月d日_HH-mm"
+  let stamp = f.string(from: started)
+  switch kind {
+  case .caption: return "字幕-" + stamp
+  case .interpret: return "同传-" + stamp
+  case .file:
+   let base = (fileName.map { ($0 as NSString).deletingPathExtension } ?? "").filter { !"/\\:".contains($0) }
+   return "转录-" + (base.isEmpty ? stamp : String(base.prefix(80)))
+  }
+ }
+
  var title: String {
+  if kind == .file, let fileName, !fileName.isEmpty { return fileName }
   let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M月d日 HH:mm"
   return f.string(from: started)
  }
@@ -109,7 +164,7 @@ struct HistoryEntry: Codable, Sendable, Identifiable, Equatable {
  }
  static func decode(_ data: Data) -> HistoryEntry? {
   guard data.count <= 8_000_000, let e = try? JSONDecoder.history.decode(HistoryEntry.self, from: data),
-        e.schema == 1, safeID(e.id), e.lines.count <= maximumLines else { return nil }
+        (1...currentSchema).contains(e.schema), safeID(e.id), e.lines.count <= maximumLines else { return nil }
   return e
  }
  func encoded() -> Data? { try? JSONEncoder.history.encode(self) }

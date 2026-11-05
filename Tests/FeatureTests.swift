@@ -309,6 +309,80 @@ import Foundation
   check(AppSettings.decode(Data(badAppearance.utf8)).appearance == .system && AppSettings.decode(Data(badAppearance.utf8)).pipShape == .strip, "unknown appearance falls back without resetting others")
   badAppearance = ""
 
-  print("FeatureTests PASS (\(checks) checks: audio decode/resample, Soniox config, settings, appearance, history, captions, caption window geometry)")
+  // Preview 6 S3: shared Soniox builder, 同声传译 settings, conversation routing, history schema 2.
+  func json(_ d: [String: Any]) -> String {
+   String(decoding: (try? JSONSerialization.data(withJSONObject: d, options: [.sortedKeys])) ?? Data(), as: UTF8.self)
+  }
+  for (src, dst) in [("auto", "zh"), ("ja", "en"), ("zh", "zh"), ("en", "zh")] {
+   var l = LanguageSettings(); l.source = src; l.target = dst
+   let hints = src == "auto" ? [dst, "en", "zh", "ja"] : [src]
+   let tr: SonioxConfig.Translation = l.translates ? .oneWay(target: dst) : .none
+   check(SonioxConfig.json(l) == SonioxConfig.json(hints: hints, translation: tr), "caption request unchanged via shared builder \(src)->\(dst)")
+  }
+  var conv = InterpretSettings(); conv.mode = .conversation; conv.languageA = "zh"; conv.languageB = "en"
+  let convReq = SonioxConfig.dictionary(hints: conv.hints, translation: conv.translation)
+  let convTr = convReq["translation"] as? [String: String]
+  check(convTr == ["type": "two_way", "language_a": "zh", "language_b": "en"], "conversation is two_way a/b")
+  check(convReq["language_hints"] as? [String] == ["zh", "en"], "conversation hints are the pair")
+  check(convReq["model"] as? String == "stt-rt-v6" && convReq["audio_format"] as? String == "s16le" && convReq["api_key"] == nil, "conversation request basics, no key in body")
+  var listen = InterpretSettings(); listen.mode = .listen; listen.listenSource = "auto"; listen.listenTarget = "zh"
+  check(SonioxConfig.dictionary(hints: listen.hints, translation: listen.translation)["translation"] as? [String: String] == ["type": "one_way", "target_language": "zh"], "listen is one_way")
+  check(listen.hints == ["zh", "en", "ja"], "listen auto hints deduped")
+  listen.listenSource = "zh"
+  check(listen.translation == .none && SonioxConfig.dictionary(hints: listen.hints, translation: listen.translation)["translation"] == nil, "listen same language: transcription only")
+  var samePair = InterpretSettings(); samePair.languageA = "en"; samePair.languageB = "en"
+  check(samePair.normalized().languageA != samePair.normalized().languageB, "conversation pair never identical")
+  var bogusI = InterpretSettings(); bogusI.languageA = "xx"; bogusI.listenTarget = "auto"
+  check(bogusI.normalized().languageA == "zh" && bogusI.normalized().listenTarget == "zh", "invalid interpret languages fall back")
+  check(InterpretSettings().mode == .conversation && InterpretSettings().flipOpposite, "defaults: conversation, opposite flipped")
+  var withI = AppSettings(); withI.interpret.mode = .listen; withI.interpret.flipOpposite = false; withI.interpret.languageB = "ja"
+  let withIRound = AppSettings.decode(withI.encoded())
+  check(withIRound.interpret.mode == .listen && !withIRound.interpret.flipOpposite && withIRound.interpret.languageB == "ja", "interpret settings round-trip")
+  check(AppSettings.decode(Data(preview5.utf8)).interpret == InterpretSettings(), "preview 5 settings get default interpret settings")
+  check(AppSettings.decode(Data(#"{"interpret":{"mode":"listen"},"pipShape":"strip"}"#.utf8)).interpret.flipOpposite, "partial interpret settings keep defaults")
+  check(InterpretMode.allCases.map(\.title) == ["对话", "自己听"], "interpret mode titles")
+
+  // Conversation routing by token language: each half reads its own language.
+  var probe = ConversationRouter(languageA: "zh", languageB: "en")
+  _ = probe.ingest([
+   ["text": "Hello", "is_final": true, "language": "en", "translation_status": "original", "start_ms": 0, "end_ms": 400],
+   ["text": "你好", "is_final": true, "language": "zh", "translation_status": "translation"],
+   ["text": "<end>", "is_final": true]
+  ])
+  let farCap = probe.far.caption, nearCap = probe.near.caption
+  check(farCap.original.contains("Hello") && !farCap.translated.contains("你好") && !farCap.original.contains("你好"), "English original goes to the far (English) half")
+  check(nearCap.translated.contains("你好") && !nearCap.original.contains("Hello") && !nearCap.translated.contains("Hello"), "Chinese translation goes to the near (Chinese) half")
+  _ = probe.ingest([
+   ["text": "谢谢", "is_final": true, "language": "zh", "translation_status": "original", "start_ms": 1000, "end_ms": 1500],
+   ["text": "Thanks", "is_final": true, "language": "en", "translation_status": "translation"]
+  ])
+  check(probe.near.caption.original.contains("谢谢") && probe.far.caption.translated.contains("Thanks"), "reply routes the other way")
+  let flushed = probe.near.finishFinals() + probe.far.finishFinals()
+  check(flushed.contains { $0.lane == .translation && $0.text == "Thanks" }, "far translation flushes as a segment")
+  check(probe.side(of: ["text": "x", "language": "ja", "translation_status": "original"]) == .far, "out-of-pair original shown far")
+  check(probe.side(of: ["text": "<end>", "is_final": true]) == nil, "control token goes to both halves")
+
+  // History schema 2: kinds, options, file names; schema 1 still decodes as caption.
+  check(HistoryEntry(id: "N", started: Date(), updated: Date(), source: "en", target: "zh").schema == 2, "new records are schema 2")
+  let v1 = #"{"schema":1,"id":"OLD-1","started":"2027-01-15T02:00:00Z","updated":"2027-01-15T02:00:10Z","source":"en","target":"zh","lines":[{"lane":"original","text":"hi","startMS":0,"endMS":500,"approximate":false}],"pendingOriginal":"","pendingTranslation":""}"#
+  let old1 = HistoryEntry.decode(Data(v1.utf8))
+  check(old1?.kind == .caption && old1?.lines.count == 1 && old1?.options == nil, "schema 1 record decodes as caption")
+  check(HistoryEntry.decode(Data(v1.replacingOccurrences(of: #""schema":1"#, with: #""schema":3"#).utf8)) == nil, "future schema rejected")
+  var talk = HistoryEntry(id: "TALK-1", started: Date(timeIntervalSince1970: 1_800_000_000), updated: Date(timeIntervalSince1970: 1_800_000_000),
+   source: "zh", target: "en", kind: .interpret,
+   options: HistoryEntry.Options(translation: .twoWay, interpretMode: .conversation, languageA: "zh", languageB: "en", hints: ["zh", "en"]))
+  talk.append([Segment(lane: .original, text: "你好", start: 0, end: 500, approximate: false)])
+  let talkRound = HistoryEntry.decode(talk.encoded()!)
+  check(talkRound == talk && talkRound?.options?.interpretMode == .conversation, "interpret record round-trips with options")
+  check(talk.exportBaseName.hasPrefix("同传-") && talk.exportBaseName.contains("月") && !talk.exportBaseName.contains(":"), "interpret export name: \(talk.exportBaseName)")
+  let cap = HistoryEntry(id: "CAP", started: Date(timeIntervalSince1970: 1_800_000_000), updated: Date(), source: "en", target: "zh")
+  check(cap.exportBaseName.hasPrefix("字幕-"), "caption export name")
+  let file = HistoryEntry(id: "F-1", started: Date(), updated: Date(), source: "auto", target: "zh", kind: .file, fileName: "meeting/a:b.m4a")
+  check(file.exportBaseName.hasPrefix("转录-"), "file export name prefix: \(file.exportBaseName)")
+  check(!file.exportBaseName.contains("/") && !file.exportBaseName.contains(":") && !file.exportBaseName.hasSuffix(".m4a"), "file export name sanitized: \(file.exportBaseName)")
+  check(file.title == "meeting/a:b.m4a", "file record titled by file name")
+  check(HistoryEntry.decode(Data(#"{"schema":2,"kind":"podcast","id":"K-1","started":"2027-01-15T02:00:00Z","updated":"2027-01-15T02:00:00Z","source":"en","target":"zh"}"#.utf8))?.kind == .caption, "unknown kind falls back to caption")
+
+  print("FeatureTests PASS (\(checks) checks: audio decode/resample, Soniox config, settings, appearance, interpret, history v2, captions, caption window geometry)")
  }
 }
