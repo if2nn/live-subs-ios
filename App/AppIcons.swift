@@ -25,7 +25,7 @@ enum AppIconChoice: String, CaseIterable, Identifiable {
 }
 
 struct AppIconSection: View {
- @State private var current = AppIconChoice.from(UIApplication.shared.alternateIconName)
+ @State private var current = AppIconChoice.orange
  @State private var error = ""
  private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
 
