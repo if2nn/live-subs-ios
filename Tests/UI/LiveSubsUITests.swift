@@ -333,7 +333,12 @@ final class LiveSubsUITests: XCTestCase {
   let go = app.buttons["start.goToSettings"]
   if go.exists {
    go.tap()
-   XCTAssertTrue(app.buttons["settings.apiKey"].firstMatch.waitForExistence(timeout: 10), "去设置 opens Settings")
+   // The Settings list keeps its scroll position (scrolled down to 使用手册 above),
+   // so the top API Key row may be off-screen; scroll up before asserting.
+   let apiKey = app.buttons["settings.apiKey"].firstMatch
+   XCTAssertTrue(app.buttons["settings.manual"].firstMatch.waitForExistence(timeout: 10) || apiKey.exists, "去设置 opens Settings")
+   reveal(apiKey)
+   XCTAssertTrue(apiKey.waitForExistence(timeout: 10), "API Key row in Settings")
   }
  }
 
