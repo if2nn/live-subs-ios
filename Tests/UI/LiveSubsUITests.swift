@@ -43,7 +43,9 @@ final class LiveSubsUITests: XCTestCase {
  /// Opens a settings row that pushes a second-level page (preview 6 layout).
  private func push(_ identifier: String) {
   let link = app.buttons[identifier].firstMatch
+  // The row may be above or below the current scroll position.
   reveal(link)
+  if !(link.exists && link.isHittable) { reveal(link, up: false) }
   XCTAssertTrue(link.waitForExistence(timeout: 10), "link \(identifier)")
   link.tap()
  }
